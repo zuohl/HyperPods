@@ -1,4 +1,4 @@
-name: Build Release APK
+name: Build and Release APK
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -30,12 +30,15 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Sign release APK
         id: sign
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ALIAS: ${{ secrets.ALIAS }}
         run: |
           set -e
           UNSIGNED_APK=$(find app/build/outputs/apk/release -maxdepth 2 -name '*.apk' | head -1)
@@ -45,7 +48,8 @@ jobs:
           fi
 
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || echo "unversioned")
-          OUT_NAME="OppoPods-${VERSION_NAME}-release.apk"
+          SHORT_SHA=${GITHUB_SHA::7}
+          OUT_NAME="HyperPods-${VERSION_NAME}-${SHORT_SHA}.apk"
 
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
 
@@ -54,33 +58,56 @@ jobs:
             "${BUILD_TOOLS}zipalign" -f 4 "$UNSIGNED_APK" "./$OUT_NAME"
             "${BUILD_TOOLS}apksigner" sign \
               --ks /tmp/keystore.jks \
-              --ks-key-alias "${{ secrets.ALIAS }}" \
-              --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
-              --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
+              --ks-key-alias "$ALIAS" \
+              --ks-pass "pass:$KEYSTORE_PASSWORD" \
+              --key-pass "pass:$KEY_PASSWORD" \
               "./$OUT_NAME"
             rm /tmp/keystore.jks
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
-            # No signing key: upload the gradle-produced APK as-is (may be unsigned)
             cp "$UNSIGNED_APK" "./$OUT_NAME"
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
           echo "apk=$OUT_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_path=./$OUT_NAME" >> "$GITHUB_OUTPUT"
+          ls -lh "./$OUT_NAME"
 
-      # Non-zipped artifact upload — GitHub Actions 2026-02 feature
       - name: Upload Release APK
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sign.outputs.apk }}
-          path: ./${{ steps.sign.outputs.apk }}
-          archive: false
+          path: ${{ steps.sign.outputs.apk_path }}
           if-no-files-found: error
+
+      - name: Send APK to Telegram
+        if: ${{ steps.sign.outputs.signed == 'true' && github.event_name != 'pull_request' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          APK_PATH: ${{ steps.sign.outputs.apk_path }}
+          APK_NAME: ${{ steps.sign.outputs.apk }}
+        run: |
+          set -e
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          CAPTION="HyperPods build: ${APK_NAME}%0ACommit: ${COMMIT_MSG}%0ABranch: ${GITHUB_REF_NAME}"
+          curl -s -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "document=@${APK_PATH}" \
+            -F "caption=${CAPTION}" \
+            | tee /tmp/tg_response.json
+          # Fail if Telegram returned an error
+          if ! grep -q '"ok":true' /tmp/tg_response.json; then
+            echo "Telegram send failed" >&2
+            exit 1
+          fi
+          echo "APK sent to Telegram successfully"
 
       - name: Create GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/') && steps.sign.outputs.signed == 'true' }}
         uses: ncipollo/release-action@v1
         with:
           token: ${{ github.token }}
-          artifacts: "./${{ steps.sign.outputs.apk }}"
+          artifacts: ${{ steps.sign.outputs.apk_path }}
           generateReleaseNotes: true
           makeLatest: true

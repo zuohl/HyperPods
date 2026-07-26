@@ -15,11 +15,11 @@ apksign {
 }
 
 android {
-    namespace = "moe.chenxy.oppopods"
+    namespace = "io.github.zuohl.hyperpods"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "nan.qiu.qcypods"
+        applicationId = "io.github.zuohl.hyperpods"
         minSdk = 33
         targetSdk = 37
         versionCode = 14
@@ -36,37 +36,37 @@ android {
                 "proguard-rules.pro"
             )
         }
-        release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            isDebuggable = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
+    release {
+        isMinifyEnabled = true
+        isShrinkResources = true
+        isDebuggable = false
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro"
+        )
     }
+}
 
-    dependenciesInfo.includeInApk = false
+dependenciesInfo.includeInApk = false
 
-    buildFeatures {
-        buildConfig = true
-        compose = true
+buildFeatures {
+    buildConfig = true
+    compose = true
+}
+
+packaging {
+    resources {
+        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        excludes += "/META-INF/**.version"
+        excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        excludes += "okhttp3/**"
+        excludes += "kotlin/**"
+        excludes += "org/**"
+        excludes += "**.properties"
+        excludes += "**.bin"
+        excludes += "kotlin-tooling-metadata.json"
     }
-
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            excludes += "/META-INF/**.version"
-            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
-            excludes += "okhttp3/**"
-            excludes += "kotlin/**"
-            excludes += "org/**"
-            excludes += "**.properties"
-            excludes += "**.bin"
-            excludes += "kotlin-tooling-metadata.json"
-        }
-    }
+}
 }
 
 java {

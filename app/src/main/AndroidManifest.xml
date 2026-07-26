@@ -10,14 +10,14 @@
     </queries>
 
     <application
-        android:name=".OppoPodsApp"
+        android:name=".HyperPodsApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:extractNativeLibs="false"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
-        android:theme="@style/Theme.OppoPods">
+        android:theme="@style/Theme.HyperPods">
 
         <activity-alias
             android:name=".LauncherActivity"
@@ -43,18 +43,18 @@
             </intent-filter>
         </activity>
         <activity android:name=".PopupActivity"
-            android:theme="@style/Theme.OppoPods.Popup"
+            android:theme="@style/Theme.HyperPods.Popup"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="chen.action.oppopods.show_pods_ui" />
+                <action android:name="io.github.zuohl.hyperpods.action.show_pods_ui" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         <provider
             android:name=".config.PodImageProvider"
-            android:authorities="nan.qiu.qcypods.podimages"
+            android:authorities="io.github.zuohl.hyperpods.podimages"
             android:exported="true"
             android:grantUriPermissions="false" />
         <!-- Set as Xposed Module -->
@@ -65,7 +65,7 @@
         <!-- Set your Xposed Module description -->
         <meta-data
             android:name="xposeddescription"
-            android:value="OPPO Earphones Support for Xiaomi HyperOS." />
+            android:value="Third-party earphones support (QCY/vivo) for Xiaomi HyperOS." />
 
         <!-- The minimum Xposed version number -->
         <meta-data

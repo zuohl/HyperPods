@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">QCYPods</string>
+    <string name="app_name">HyperPods</string>
     <string name="app_subtitle">QCY 耳机适配 HyperOS</string>
     <string name="pod_info">耳机信息</string>
-    <string name="about">关于 QCYPods</string>
+    <string name="about">关于 HyperPods</string>
     <string name="settings">设置</string>
     <string name="module">模块</string>
     <string name="earphones">耳机</string>
