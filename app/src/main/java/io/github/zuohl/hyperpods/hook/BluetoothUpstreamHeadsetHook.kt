@@ -279,7 +279,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                lastOppoDevice = device
                rememberCallback(callback)
                result = null
-                Log.i(TAG, "registerCallbackDevice swallowed callback=$callback device=${device.describe()} callbacks=${callbacks.size}")
+                Log.d(TAG, "registerCallbackDevice swallowed callback=$callback device=${device.describe()} callbacks=${callbacks.size}")
                requestBluetoothStatus("registerCallbackDevice")
                sendRealStatus(device, "registerCallbackDevice")
                sendRealStatusDelayed(device, "registerCallbackDevice-refresh", 350L)
@@ -639,7 +639,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
    private fun sendRealStatus(address: String, reason: String) {
         if (callbacks.isEmpty()) {
-            Log.i(TAG, "sendRealStatus skipped: no callback reason=$reason address=$address")
+            Log.d(TAG, "sendRealStatus skipped: no callback reason=$reason address=$address")
             return
         }
         val payload = realRefreshPayload()
@@ -650,20 +650,20 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                 val binder = runCatching { callMethod(callback, "asBinder") as? IBinder }.getOrNull()
                 if (binder != null && !binder.isBinderAlive) {
                     forgetCallback(callback)
-                    Log.i(TAG, "sendRealStatus pruned dead callback reason=$reason callback=$callback")
+                    Log.d(TAG, "sendRealStatus pruned dead callback reason=$reason callback=$callback")
                     return@forEach
                 }
                 runCatching {
                     callMethod(callback, "refreshStatus", address, payload)
                     alive++
-                    Log.i(TAG, "sendRealStatus OK reason=$reason address=$address payload=$payload callbacks=${callbacks.size}")
+                    Log.d(TAG, "sendRealStatus OK reason=$reason address=$address payload=$payload callbacks=${callbacks.size}")
                 }.onFailure {
                     forgetCallback(callback)
                     Log.w(TAG, "sendRealStatus failed, pruned reason=$reason callback=$callback", it)
                 }
             }
             if (alive == 0 && snapshot.isNotEmpty()) {
-                Log.i(TAG, "sendRealStatus all callbacks dead reason=$reason address=$address pruned=${snapshot.size}")
+                Log.d(TAG, "sendRealStatus all callbacks dead reason=$reason address=$address pruned=${snapshot.size}")
             }
         }
     }

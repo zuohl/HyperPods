@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import io.github.zuohl.hyperpods.BuildConfig
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
+import io.github.zuohl.hyperpods.config.ConfigManager
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams
 import java.util.WeakHashMap
@@ -21,7 +22,7 @@ object SettingsHeadsetHook : HookContext() {
     private const val PREFS_NAME = "hyperpods_milink_state"
     private const val SETTINGS_REFRESH_INTERVAL_MS = 3_000L
     // Bypass ConfigManager.logLevel() — always output to LSPosed log
-    private fun logI(msg: String) { Log.module?.log(android.util.Log.INFO, TAG, msg) }
+    private fun logI(msg: String) { if (ConfigManager.logLevel() >= ConfigManager.LOG_LEVEL_BASIC) Log.module?.log(android.util.Log.INFO, TAG, msg) }
     private fun logW(msg: String, t: Throwable? = null) {
         if (t != null) Log.module?.log(android.util.Log.ERROR, TAG, msg, t)
         else Log.module?.log(android.util.Log.WARN, TAG, msg)
@@ -115,7 +116,7 @@ object SettingsHeadsetHook : HookContext() {
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "checkSupport") { support ->
             support.startsWith(fakeDeviceId()) || support.contains(fakeDeviceId())
         }
-        hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isTWS01Headset") { it == fakeDeviceId() }
+        hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isTWS01Headset") { false }
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isK77sHeadset") { false }
         hookBleMmaConnectByContext()
         hookBleMmaConnectByService()

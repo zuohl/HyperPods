@@ -115,7 +115,7 @@ object HeadsetStateDispatcher : HookContext() {
                     BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
                     BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
                         val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
-                        Log.i("HyperPods", "profile state changed action=${intent.action} state=$state device=${device.name}/${device.address} isSupportedPod=${isSupportedPod(device)}")
+                        Log.d("HyperPods", "profile state changed action=${intent.action} state=$state device=${device.name}/${device.address} isSupportedPod=${isSupportedPod(device)}")
                         if (state == BluetoothProfile.STATE_DISCONNECTED || state == BluetoothProfile.STATE_DISCONNECTING) {
                             Log.d("HyperPods", "profile disconnected state=$state device=${device.name}/${device.address}")
                             runCatching {
