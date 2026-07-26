@@ -273,7 +273,7 @@ object QcyPacketParser {
         return PodParams(
             battery = value and 0x7F,
             isCharging = (value and 0x80) != 0,
-            isConnected = true,
+            isConnected = value != 0,
             rawStatus = value,
         )
     }
@@ -301,15 +301,15 @@ object QcyAdvertisementParser {
         )
     }
 
-    private fun parsePod(raw: Byte): PodParams {
-        val value = raw.toInt() and 0xFF
-        return PodParams(
-            battery = (value and 0x7F).coerceIn(0, 100),
-            isCharging = (value and 0x80) != 0,
-            isConnected = true,
-            rawStatus = value,
-        )
-    }
+   private fun parsePod(raw: Byte): PodParams {
+       val value = raw.toInt() and 0xFF
+       return PodParams(
+           battery = (value and 0x7F).coerceIn(0, 100),
+           isCharging = (value and 0x80) != 0,
+           isConnected = value != 0,
+           rawStatus = value,
+       )
+   }
 
     private fun parseScrambledAddress(data: ByteArray, offset: Int, order: IntArray): String? {
         if (data.size < offset + 6) return null

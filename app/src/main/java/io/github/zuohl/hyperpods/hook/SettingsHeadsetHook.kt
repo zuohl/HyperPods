@@ -56,17 +56,14 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     override fun onHook() {
-        logI("onHook() starting — com.android.settings hook active")
         hookActivityEntry()
         hookSupportChecks()
         hookServiceProxy()
         hookBatteryView()
         hookFragmentState()
-        logI("onHook() all sub-hooks attempted")
     }
 
     private fun hookActivityEntry() {
-        logI("hookActivityEntry: trying MiuiHeadsetActivity + MiuiHeadsetActivityPlugin")
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.MiuiHeadsetActivity", "onCreate", Bundle::class.java)) {
                 val activity = instance as? Context ?: return@hookBefore
@@ -80,8 +77,31 @@ object SettingsHeadsetHook : HookContext() {
                 intent.putExtra("DEVICE_ID", fakeDeviceId())
                 Log.d(TAG, "MiuiHeadsetActivity intent patched address=${device?.address}")
             }
-            hookActivityStringGetter("getDeviceID") { fakeDeviceId() }
+           hookActivityStringGetter("getDeviceID") { fakeDeviceId() }
             hookActivityStringGetter("getSupport") { fakeSupport() }
+            // Intercept "more settings" navigation: when the system tries to open
+            // Xiaoai (old earphone default), redirect to the module settings page.
+            runCatching {
+                hookBefore(findMethod("com.android.settings.bluetooth.MiuiHeadsetActivity", "startActivity", Intent::class.java)) {
+                    val intent = args[0] as? Intent ?: return@hookBefore
+                    val pkg = intent.component?.packageName ?: intent.`package` ?: ""
+                    val cls = intent.component?.className ?: ""
+                    if (pkg == "com.miui.voiceassist" || pkg == "com.xiaomi.ai" ||
+                        pkg == "com.miui.audiomonitor" || cls.contains("Xiaoai") || cls.contains("VoiceAssist")) {
+                        Log.w(TAG, "redirect Xiaoai launch to module: pkg=$pkg cls=$cls")
+                        val moduleIntent = Intent().apply {
+                            setClassName(BuildConfig.APPLICATION_ID, "io.github.zuohl.hyperpods.MainActivity")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        val ctx = instance as? Context
+                        ctx?.startActivity(Intent().apply {
+                            setClassName(BuildConfig.APPLICATION_ID, "io.github.zuohl.hyperpods.MainActivity")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                        result = null
+                    }
+                }
+            }.onFailure { }
         }.onFailure { logW("hook MiuiHeadsetActivity skipped", it) }
 
         runCatching {
@@ -112,7 +132,6 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun hookSupportChecks() {
-        logI("hookSupportChecks: trying HeadsetIDConstants")
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "checkSupport") { support ->
             support.startsWith(fakeDeviceId()) || support.contains(fakeDeviceId())
         }
@@ -165,7 +184,6 @@ object SettingsHeadsetHook : HookContext() {
     }
 
    private fun hookServiceProxy() {
-        logI("hookServiceProxy: trying IMiuiHeadsetService Proxy")
        val proxyClass = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
        hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { fakeSupport() }
         // These proxy methods take a String (address) arg on newer HyperOS.
@@ -322,7 +340,6 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun hookBatteryView() {
-        logI("hookBatteryView: trying MiuiHeadsetBattery")
         runCatching {
             hookConstructorAfter(findConstructorByParamCount("com.android.settings.bluetooth.tws.MiuiHeadsetBattery", 4)) {
                 val device = args[0] as? BluetoothDevice ?: return@hookConstructorAfter
@@ -349,7 +366,6 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun hookFragmentState() {
-        logI("hookFragmentState: trying MiuiHeadsetFragment")
         runCatching {
             hookAfter(findMethodByParamCount("com.android.settings.bluetooth.MiuiHeadsetFragment", "onCreateView", 3)) {
                 registerStatusReceiver(runCatching { getObjectField(instance, "mActivity") as? Context }.getOrNull())
@@ -426,7 +442,6 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun registerStatusReceiver(ctx: Context?) {
-        logI("registerStatusReceiver called ctx=$ctx")
         if (ctx == null || receiverRegistered) return
         context = ctx.applicationContext ?: ctx
         loadState()
@@ -523,7 +538,6 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun injectFragmentStatus(fragment: Any?) {
-        logI("injectFragmentStatus called anc=$currentAnc battery=${settingsBatteryString()} address=$currentAddress")
         Log.i(TAG, "injectFragmentStatus anc=$currentAnc battery=${settingsBatteryString()} address=$currentAddress")
         runCatching {
             val payload = "${settingsAncMode()}|0100;0101;0102;0103;0200;0201|${settingsBatteryString()}|00"
