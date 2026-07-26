@@ -20,6 +20,12 @@ object SettingsHeadsetHook : HookContext() {
     private const val TAG = "HyperPods-Settings"
     private const val PREFS_NAME = "hyperpods_milink_state"
     private const val SETTINGS_REFRESH_INTERVAL_MS = 3_000L
+    // Bypass ConfigManager.logLevel() — always output to LSPosed log
+    private fun logI(msg: String) { Log.module?.log(android.util.Log.INFO, TAG, msg) }
+    private fun logW(msg: String, t: Throwable? = null) {
+        if (t != null) Log.module?.log(android.util.Log.ERROR, TAG, msg, t)
+        else Log.module?.log(android.util.Log.WARN, TAG, msg)
+    }
     private val knownPodAddresses = linkedSetOf<String>()
     private val batteryViews = WeakHashMap<Any, BluetoothDevice>()
     private val headsetFragments = WeakHashMap<Any, Boolean>()
@@ -49,15 +55,17 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     override fun onHook() {
-        Log.i(TAG, "SettingsHeadsetHook onHook() — com.android.settings hook active")
+        logI("onHook() starting — com.android.settings hook active")
         hookActivityEntry()
         hookSupportChecks()
         hookServiceProxy()
         hookBatteryView()
         hookFragmentState()
+        logI("onHook() all sub-hooks attempted")
     }
 
     private fun hookActivityEntry() {
+        logI("hookActivityEntry: trying MiuiHeadsetActivity + MiuiHeadsetActivityPlugin")
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.MiuiHeadsetActivity", "onCreate", Bundle::class.java)) {
                 val activity = instance as? Context ?: return@hookBefore
@@ -73,7 +81,7 @@ object SettingsHeadsetHook : HookContext() {
             }
             hookActivityStringGetter("getDeviceID") { fakeDeviceId() }
             hookActivityStringGetter("getSupport") { fakeSupport() }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetActivity skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetActivity skipped", it) }
 
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.MiuiHeadsetActivityPlugin", "onCreate", Bundle::class.java)) {
@@ -87,7 +95,7 @@ object SettingsHeadsetHook : HookContext() {
                 intent.putExtra("DEVICE_ID", fakeDeviceId())
                 Log.d(TAG, "MiuiHeadsetActivityPlugin intent patched address=${device?.address}")
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetActivityPlugin skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetActivityPlugin skipped", it) }
     }
 
     private fun hookActivityStringGetter(methodName: String, value: () -> String) {
@@ -99,10 +107,11 @@ object SettingsHeadsetHook : HookContext() {
                 result = value()
                 Log.d(TAG, "Activity.$methodName forced=$result")
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetActivity.$methodName skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetActivity.$methodName skipped", it) }
     }
 
     private fun hookSupportChecks() {
+        logI("hookSupportChecks: trying HeadsetIDConstants")
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "checkSupport") { support ->
             support.startsWith(fakeDeviceId()) || support.contains(fakeDeviceId())
         }
@@ -122,7 +131,7 @@ object SettingsHeadsetHook : HookContext() {
                 result = resultForValue(value)
                 Log.d(TAG, "$className.$methodName forced value=$value result=$result")
             }
-        }.onFailure { Log.w(TAG, "hook $className.$methodName(String) skipped", it) }
+        }.onFailure { logW("hook $className.$methodName(String) skipped", it) }
     }
 
     private fun hookBleMmaConnectByContext() {
@@ -136,7 +145,7 @@ object SettingsHeadsetHook : HookContext() {
                     Log.d(TAG, "isBleMmaConnect(Context) forced true")
                 }
             }
-        }.onFailure { Log.w(TAG, "hook HeadsetIDConstants.isBleMmaConnect(Context) skipped", it) }
+        }.onFailure { logW("hook HeadsetIDConstants.isBleMmaConnect(Context) skipped", it) }
     }
 
     private fun hookBleMmaConnectByService() {
@@ -151,10 +160,11 @@ object SettingsHeadsetHook : HookContext() {
                     Log.d(TAG, "isBleMmaConnect(Service) forced true")
                 }
             }
-        }.onFailure { Log.w(TAG, "hook HeadsetIDConstants.isBleMmaConnect(Service) skipped", it) }
+        }.onFailure { logW("hook HeadsetIDConstants.isBleMmaConnect(Service) skipped", it) }
     }
 
    private fun hookServiceProxy() {
+        logI("hookServiceProxy: trying IMiuiHeadsetService Proxy")
        val proxyClass = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
        hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { fakeSupport() }
         // These proxy methods take a String (address) arg on newer HyperOS.
@@ -192,7 +202,7 @@ object SettingsHeadsetHook : HookContext() {
                 this.result = result()
                 Log.d(TAG, "$methodName proxy forced result=${this.result} address=${device?.address}")
             }
-        }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
+        }.onFailure { logW("hook proxy $methodName skipped", it) }
     }
 
    private fun hookProxyStringArgResult(className: String, methodName: String, vararg parameterTypes: Class<*>, result: (List<Any?>) -> String) {
@@ -207,7 +217,7 @@ object SettingsHeadsetHook : HookContext() {
                this.result = result(args)
                Log.d(TAG, "$methodName proxy forced result=${this.result} address=${device?.address ?: address}")
            }
-       }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
+       }.onFailure { logW("hook proxy $methodName skipped", it) }
    }
 
     /**
@@ -250,7 +260,7 @@ object SettingsHeadsetHook : HookContext() {
                 Log.i(TAG, "$methodName proxy(no-arg) forced result=${this.result}")
             }
             Log.i(TAG, "hook proxy $methodName(no-arg) installed")
-        }.onFailure { Log.w(TAG, "hook proxy $methodName skipped (no matching signature)", it) }
+        }.onFailure { logW("hook proxy $methodName skipped (no matching signature)", it) }
     }
 
     private fun hookProxyBooleanStringResult(className: String, methodName: String, result: () -> Boolean) {
@@ -263,7 +273,7 @@ object SettingsHeadsetHook : HookContext() {
                 this.result = result()
                 Log.d(TAG, "$methodName proxy forced result=${this.result} address=$address")
             }
-        }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
+        }.onFailure { logW("hook proxy $methodName skipped", it) }
     }
 
     private fun hookProxyVoidDeviceCommand(className: String, methodName: String, vararg parameterTypes: Class<*>, mode: (List<Any?>) -> Int?) {
@@ -279,7 +289,7 @@ object SettingsHeadsetHook : HookContext() {
                 this.result = null
                 Log.d(TAG, "$methodName proxy command handled address=${device?.address} oppoMode=$oppoMode")
             }
-        }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
+        }.onFailure { logW("hook proxy $methodName skipped", it) }
     }
 
     private fun hookProxyVoidDeviceNoop(className: String, methodName: String, vararg parameterTypes: Class<*>) {
@@ -293,7 +303,7 @@ object SettingsHeadsetHook : HookContext() {
                 this.result = null
                 Log.d(TAG, "$methodName proxy swallowed for virtual Oppo device")
             }
-        }.onFailure { Log.w(TAG, "hook proxy noop $methodName skipped", it) }
+        }.onFailure { logW("hook proxy noop $methodName skipped", it) }
     }
 
     private fun hookProxyVoidDeviceStringNoop(className: String, methodName: String, vararg parameterTypes: Class<*>) {
@@ -307,10 +317,11 @@ object SettingsHeadsetHook : HookContext() {
                 this.result = null
                 Log.d(TAG, "$methodName proxy swallowed for virtual Oppo device")
             }
-        }.onFailure { Log.w(TAG, "hook proxy noop $methodName skipped", it) }
+        }.onFailure { logW("hook proxy noop $methodName skipped", it) }
     }
 
     private fun hookBatteryView() {
+        logI("hookBatteryView: trying MiuiHeadsetBattery")
         runCatching {
             hookConstructorAfter(findConstructorByParamCount("com.android.settings.bluetooth.tws.MiuiHeadsetBattery", 4)) {
                 val device = args[0] as? BluetoothDevice ?: return@hookConstructorAfter
@@ -323,7 +334,7 @@ object SettingsHeadsetHook : HookContext() {
                 updateBatteryView(instance)
                 Log.d(TAG, "MiuiHeadsetBattery registered address=${device.address}")
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetBattery constructor skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetBattery constructor skipped", it) }
 
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.tws.MiuiHeadsetBattery", "onBatteryChanged", String::class.java)) {
@@ -333,10 +344,11 @@ object SettingsHeadsetHook : HookContext() {
                 result = null
                 updateBatteryView(instance)
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetBattery.onBatteryChanged(String) skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetBattery.onBatteryChanged(String) skipped", it) }
     }
 
     private fun hookFragmentState() {
+        logI("hookFragmentState: trying MiuiHeadsetFragment")
         runCatching {
             hookAfter(findMethodByParamCount("com.android.settings.bluetooth.MiuiHeadsetFragment", "onCreateView", 3)) {
                 registerStatusReceiver(runCatching { getObjectField(instance, "mActivity") as? Context }.getOrNull())
@@ -347,7 +359,7 @@ object SettingsHeadsetHook : HookContext() {
                 startPeriodicRefresh()
                 injectFragmentStatus(instance)
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.onCreateView skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetFragment.onCreateView skipped", it) }
 
         runCatching {
             hookAfter(findMethodByParamCount("com.android.settings.bluetooth.MiuiHeadsetFragment", "onServiceConnected", 0)) {
@@ -358,7 +370,7 @@ object SettingsHeadsetHook : HookContext() {
                 startPeriodicRefresh()
                 injectFragmentStatus(instance)
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.onServiceConnected skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetFragment.onServiceConnected skipped", it) }
 
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.MiuiHeadsetFragment", "refreshStatus", String::class.java, String::class.java)) {
@@ -366,23 +378,23 @@ object SettingsHeadsetHook : HookContext() {
                 val data = args[1] as? String
                 Log.d(TAG, "Fragment.refreshStatus before key=$key data=$data ${fragmentDebug(instance)} isOppo=${isTargetFragment(instance)}")
                 if (isTargetFragment(instance) && key?.startsWith("MMA_CONNECTION_FAILED") == true) {
-                    Log.w(TAG, "Fragment.refreshStatus swallowed MMA failure for virtual Oppo device key=$key")
+                    logW("Fragment.refreshStatus swallowed MMA failure for virtual Oppo device key=$key")
                     injectFragmentStatus(instance)
                     result = null
                 }
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.refreshStatus skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetFragment.refreshStatus skipped", it) }
 
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.MiuiHeadsetFragment", "handleConnectMmaFailed", String::class.java)) {
-                Log.w(TAG, "Fragment.handleConnectMmaFailed arg=${args[0]} ${fragmentDebug(instance)} isOppo=${isTargetFragment(instance)}")
+                logW("Fragment.handleConnectMmaFailed arg=${args[0]} ${fragmentDebug(instance)} isOppo=${isTargetFragment(instance)}")
                 if (isTargetFragment(instance)) {
                     injectFragmentStatus(instance)
                     result = null
-                    Log.w(TAG, "Fragment.handleConnectMmaFailed swallowed for virtual Oppo device")
+                    logW("Fragment.handleConnectMmaFailed swallowed for virtual Oppo device")
                 }
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.handleConnectMmaFailed skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetFragment.handleConnectMmaFailed skipped", it) }
 
         hookFragmentAncCommand("updateAncMode", Int::class.javaPrimitiveType!!, Boolean::class.javaPrimitiveType!!) { commandArgs ->
             podAncFromSettings(commandArgs[0] as? Int ?: 0)
@@ -409,10 +421,11 @@ object SettingsHeadsetHook : HookContext() {
                 result = null
                 Log.d(TAG, "MiuiHeadsetFragment.$methodName handled oppoMode=$oppoMode")
             }
-        }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.$methodName skipped", it) }
+        }.onFailure { logW("hook MiuiHeadsetFragment.$methodName skipped", it) }
     }
 
     private fun registerStatusReceiver(ctx: Context?) {
+        logI("registerStatusReceiver called ctx=$ctx")
         if (ctx == null || receiverRegistered) return
         context = ctx.applicationContext ?: ctx
         loadState()
@@ -490,7 +503,7 @@ object SettingsHeadsetHook : HookContext() {
     private fun updateBatteryViews() {
         batteryViews.keys.toList().forEach { view ->
             runCatching { updateBatteryView(view) }
-                .onFailure { Log.w(TAG, "update battery view failed", it) }
+                .onFailure { logW("update battery view failed", it) }
         }
     }
 
@@ -509,6 +522,7 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun injectFragmentStatus(fragment: Any?) {
+        logI("injectFragmentStatus called anc=$currentAnc battery=${settingsBatteryString()} address=$currentAddress")
         Log.i(TAG, "injectFragmentStatus anc=$currentAnc battery=${settingsBatteryString()} address=$currentAddress")
         runCatching {
             val payload = "${settingsAncMode()}|0100;0101;0102;0103;0200;0201|${settingsBatteryString()}|00"
@@ -523,7 +537,7 @@ object SettingsHeadsetHook : HookContext() {
                 callMethod(fragment, "refreshStatus", address, refreshPayload)
             }
             Log.d(TAG, "fragment status injected anc=$currentAnc battery=${settingsBatteryString()}")
-        }.onFailure { Log.w(TAG, "inject fragment status failed", it) }
+        }.onFailure { logW("inject fragment status failed", it) }
     }
 
     private fun isTargetFragment(fragment: Any?): Boolean {
@@ -681,7 +695,7 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun sendPodAnc(mode: Int) {
         val ctx = context ?: run {
-            Log.w(TAG, "sendPodAnc skipped: context is null mode=$mode")
+            logW("sendPodAnc skipped: context is null mode=$mode")
             return
         }
         ctx.sendBroadcast(Intent(PodAction.ACTION_ANC_SELECT).apply {
@@ -693,7 +707,7 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun sendTransparencyVocalEnhancement(enabled: Boolean) {
         val ctx = context ?: run {
-            Log.w(TAG, "sendTransparencyVocalEnhancement skipped: context is null enabled=$enabled")
+            logW("sendTransparencyVocalEnhancement skipped: context is null enabled=$enabled")
             return
         }
         currentTransparencyVocalEnhancement = enabled
