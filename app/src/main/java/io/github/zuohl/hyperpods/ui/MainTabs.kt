@@ -140,6 +140,8 @@ internal fun MainTabsScaffold(
     onOpenRfcommDebug: () -> Unit,
     fakeDeviceId: MutableState<String>,
     onFakeDeviceIdChange: (String) -> Unit,
+    manualMacBindings: MutableState<Set<String>>,
+    onManualMacBindingsChange: (Set<String>) -> Unit,
     onOpenTheme: () -> Unit,
     onOpenAbout: () -> Unit,
     showRestartScopeDialog: Boolean,
@@ -303,6 +305,8 @@ internal fun MainTabsScaffold(
                         onOpenDeviceCapabilities = onOpenDeviceCapabilities,
                         fakeDeviceId = fakeDeviceId,
                         onFakeDeviceIdChange = onFakeDeviceIdChange,
+                        manualMacBindings = manualMacBindings,
+                        onManualMacBindingsChange = onManualMacBindingsChange,
                         onOpenTheme = onOpenTheme,
                         onOpenAbout = onOpenAbout,
                     )
@@ -549,6 +553,8 @@ private fun SettingsTabPage(
     onOpenDeviceCapabilities: () -> Unit,
     fakeDeviceId: MutableState<String>,
     onFakeDeviceIdChange: (String) -> Unit,
+    manualMacBindings: MutableState<Set<String>>,
+    onManualMacBindingsChange: (Set<String>) -> Unit,
     onOpenTheme: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
@@ -594,6 +600,8 @@ private fun SettingsTabPage(
             onOpenDeviceCapabilities = onOpenDeviceCapabilities,
             fakeDeviceId = fakeDeviceId,
             onFakeDeviceIdChange = onFakeDeviceIdChange,
+            manualMacBindings = manualMacBindings,
+            onManualMacBindingsChange = onManualMacBindingsChange,
             onOpenTheme = onOpenTheme,
             onOpenAbout = onOpenAbout,
         )

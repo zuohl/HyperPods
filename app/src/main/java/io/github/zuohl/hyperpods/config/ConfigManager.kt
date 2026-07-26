@@ -17,6 +17,13 @@ data class AppConfig(
     val adaptiveCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
     val spatialAudioCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
     val spatialSoundSwitchCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
+    /**
+     * Manually bound MAC addresses (uppercase, no separators) that should be
+     * treated as supported pods even when the device name doesn't match any
+     * known brand keyword. Enables status bar icon and system popup for
+     * earphones without a known protocol implementation.
+     */
+    val manualMacBindings: Set<String> = emptySet(),
 )
 
 object ConfigManager {
@@ -32,6 +39,7 @@ object ConfigManager {
     const val PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE = "adaptive_capability_override"
     const val PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE = "spatial_audio_capability_override"
     const val PREF_KEY_SPATIAL_SOUND_SWITCH_CAPABILITY_OVERRIDE = "spatial_sound_switch_capability_override"
+    const val PREF_KEY_MANUAL_MAC_BINDINGS = "manual_mac_bindings"
     const val DEFAULT_FAKE_DEVICE_ID = "01010607"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
@@ -98,6 +106,8 @@ object ConfigManager {
 
     fun spatialSoundSwitchCapabilityOverride(): Int = current().spatialSoundSwitchCapabilityOverride.normalizedCapabilityOverride()
 
+    fun manualMacBindings(): Set<String> = current().manualMacBindings.mapNotNull { it.normalizedMac() }.toSet()
+
     fun fakeSupport(): String = "${fakeDeviceId()},000000000000000010000000"
 
     fun updateFakeDeviceId(prefs: SharedPreferences, fakeDeviceId: String) {
@@ -150,6 +160,12 @@ object ConfigManager {
         save(prefs, service, config)
     }
 
+    fun updateManualMacBindings(prefs: SharedPreferences, service: XposedService?, bindings: Set<String>) {
+        val normalized = bindings.mapNotNull { it.normalizedMac() }.toSet()
+        val config = current().copy(manualMacBindings = normalized)
+        save(prefs, service, config)
+    }
+
     fun save(prefs: SharedPreferences, config: AppConfig) {
         val oldConfig = cachedConfig
         val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
@@ -182,6 +198,7 @@ object ConfigManager {
             .putInt(PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE, config.adaptiveCapabilityOverride)
             .putInt(PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE, config.spatialAudioCapabilityOverride)
             .putInt(PREF_KEY_SPATIAL_SOUND_SWITCH_CAPABILITY_OVERRIDE, config.spatialSoundSwitchCapabilityOverride)
+            .putStringSet(PREF_KEY_MANUAL_MAC_BINDINGS, config.manualMacBindings)
             .commit()
     }
 
@@ -195,6 +212,7 @@ object ConfigManager {
         val directAdaptiveCapabilityOverride = prefs.getInt(PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
         val directSpatialAudioCapabilityOverride = prefs.getInt(PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
         val directSpatialSoundSwitchCapabilityOverride = prefs.getInt(PREF_KEY_SPATIAL_SOUND_SWITCH_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
+        val directManualMacBindings = prefs.getStringSet(PREF_KEY_MANUAL_MAC_BINDINGS, null)
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, directFakeDeviceId, raw)
         val config = raw?.let {
@@ -212,6 +230,7 @@ object ConfigManager {
                 adaptiveCapabilityOverride = directAdaptiveCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.adaptiveCapabilityOverride,
                 spatialAudioCapabilityOverride = directSpatialAudioCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialAudioCapabilityOverride,
                 spatialSoundSwitchCapabilityOverride = directSpatialSoundSwitchCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialSoundSwitchCapabilityOverride,
+                manualMacBindings = directManualMacBindings?.mapNotNull { it.normalizedMac() }?.toSet() ?: config.manualMacBindings,
             ).normalized()
         }
         return config.copy(
@@ -224,6 +243,7 @@ object ConfigManager {
             adaptiveCapabilityOverride = directAdaptiveCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.adaptiveCapabilityOverride,
             spatialAudioCapabilityOverride = directSpatialAudioCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialAudioCapabilityOverride,
             spatialSoundSwitchCapabilityOverride = directSpatialSoundSwitchCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialSoundSwitchCapabilityOverride,
+            manualMacBindings = directManualMacBindings?.mapNotNull { it.normalizedMac() }?.toSet() ?: config.manualMacBindings,
         ).normalized()
     }
 
@@ -237,9 +257,18 @@ object ConfigManager {
         adaptiveCapabilityOverride = adaptiveCapabilityOverride.normalizedCapabilityOverride(),
         spatialAudioCapabilityOverride = spatialAudioCapabilityOverride.normalizedCapabilityOverride(),
         spatialSoundSwitchCapabilityOverride = spatialSoundSwitchCapabilityOverride.normalizedCapabilityOverride(),
+        manualMacBindings = manualMacBindings.mapNotNull { it.normalizedMac() }.toSet(),
     )
 
     private fun String.normalizedFakeDeviceId(): String = trim().takeIf { it.isNotEmpty() } ?: DEFAULT_FAKE_DEVICE_ID
+
+    /** Normalize a MAC address to uppercase with colon separators, or null if invalid. */
+    private fun String.normalizedMac(): String? {
+        val cleaned = uppercase().filter { it.isLetterOrDigit() }
+        if (cleaned.length != 12) return null
+        if (!cleaned.all { it in "0123456789ABCDEF" }) return null
+        return cleaned.chunked(2).joinToString(":")
+    }
 
     private fun Int.normalizedCapabilityOverride(): Int = coerceIn(CAPABILITY_OVERRIDE_AUTO, CAPABILITY_OVERRIDE_FORCE_DISABLED)
 

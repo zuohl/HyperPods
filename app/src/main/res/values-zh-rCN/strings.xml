@@ -145,4 +145,13 @@
     <string name="restart_scope_summary">选择要通过 root 重启的作用域软件。</string>
     <string name="restart_scope_success">作用域已重启</string>
     <string name="restart_scope_failed">Root 重启失败</string>
+    <string name="manual_mac_binding">手动设备绑定</string>
+    <string name="manual_mac_binding_summary">通过 MAC 地址绑定耳机，即使无协议支持也能显示状态栏图标和系统弹窗</string>
+    <string name="manual_mac_add">添加 MAC 地址</string>
+    <string name="manual_mac_hint">XX:XX:XX:XX:XX:XX</string>
+    <string name="manual_mac_empty">未绑定任何设备。添加 MAC 地址即可为不支持的耳机启用系统能力。</string>
+    <string name="manual_mac_invalid">MAC 地址格式不正确</string>
+    <string name="manual_mac_duplicate">该 MAC 地址已绑定</string>
+    <string name="manual_mac_remove">移除</string>
+    <string name="manual_mac_help">耳机 MAC 地址可在：系统设置 → 蓝牙 → 设备详情 → MAC地址 中查看</string>
 </resources>

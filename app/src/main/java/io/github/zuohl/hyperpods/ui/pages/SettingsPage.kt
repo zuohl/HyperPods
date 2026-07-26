@@ -1,5 +1,7 @@
 package io.github.zuohl.hyperpods.ui.pages
 
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +12,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.zuohl.hyperpods.R
@@ -18,6 +21,9 @@ import io.github.zuohl.hyperpods.pods.GameModeImplementation
 import io.github.zuohl.hyperpods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.TextField
@@ -52,6 +58,8 @@ fun SettingsPage(
     onOpenDeviceCapabilities: () -> Unit = {},
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
+    manualMacBindings: MutableState<Set<String>> = mutableStateOf(emptySet()),
+    onManualMacBindingsChange: (Set<String>) -> Unit = {},
     onOpenTheme: () -> Unit = {},
     onOpenAbout: () -> Unit = {}
 ) {
@@ -241,11 +249,70 @@ fun SettingsPage(
         }
 
         item {
+            ManualBindingCard(
+                manualMacBindings = manualMacBindings,
+                onManualMacBindingsChange = onManualMacBindingsChange,
+            )
+        }
+
+        item {
             Card(modifier = Modifier.padding(top = 12.dp)) {
                 BasicComponent(
                     title = stringResource(R.string.about),
                     summary = "HyperPods",
                     onClick = onOpenAbout
+                )
+            }
+        }
+    }
+}
+
+@SuppressLint("MissingPermission")
+@Composable
+private fun ManualBindingCard(
+    manualMacBindings: MutableState<Set<String>>,
+    onManualMacBindingsChange: (Set<String>) -> Unit,
+) {
+    val context = LocalContext.current
+    val btManager = context.getSystemService(BluetoothManager::class.java)
+    val adapter = btManager?.adapter
+    val pairedDevices = remember { adapter?.bondedDevices?.toList()?.sortedBy { it.name ?: it.address } ?: emptyList() }
+
+    Card(modifier = Modifier.padding(top = 12.dp)) {
+        BasicComponent(
+            title = stringResource(R.string.manual_mac_binding),
+            summary = stringResource(R.string.manual_mac_binding_summary),
+        )
+        if (pairedDevices.isEmpty()) {
+            Text(
+                text = stringResource(R.string.no_paired_devices),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.manual_mac_help),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            pairedDevices.forEach { device ->
+                val mac = device.address.uppercase()
+                val bound = manualMacBindings.value.any { it.uppercase().replace(":", "") == mac.replace(":", "") }
+                SwitchPreference(
+                    title = device.name ?: stringResource(R.string.unknown_device),
+                    summary = mac,
+                    checked = bound,
+                    onCheckedChange = { enabled ->
+                        val normalized = mac.chunked(2).joinToString(":")
+                        onManualMacBindingsChange(
+                            if (enabled) manualMacBindings.value + normalized
+                            else manualMacBindings.value.filterNot { it.uppercase().replace(":", "") == mac.replace(":", "") }.toSet()
+                        )
+                    }
                 )
             }
         }

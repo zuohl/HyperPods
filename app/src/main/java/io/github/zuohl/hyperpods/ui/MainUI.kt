@@ -164,6 +164,7 @@ fun MainUI(
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
     val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
+    val manualMacBindings = remember { mutableStateOf(appConfig.manualMacBindings) }
     val islandMode = remember { mutableStateOf(appConfig.islandMode) }
     val islandShowTimings = remember { mutableStateOf(appConfig.islandShowTimings) }
     val spatialAudioMode = remember { mutableStateOf(prefs.getInt("spatial_audio_mode", ConfigManager.SPATIAL_AUDIO_OFF)) }
@@ -849,6 +850,15 @@ fun MainUI(
                 onFakeDeviceIdChange = {
                     fakeDeviceId.value = it
                     ConfigManager.updateFakeDeviceId(prefs, xposedService, it)
+                    broadcastConfigChanged(context, "com.android.bluetooth")
+                    broadcastConfigChanged(context, "com.android.settings")
+                    broadcastConfigChanged(context, "com.milink.service")
+                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                },
+                manualMacBindings = manualMacBindings,
+                onManualMacBindingsChange = {
+                    manualMacBindings.value = it
+                    ConfigManager.updateManualMacBindings(prefs, xposedService, it)
                     broadcastConfigChanged(context, "com.android.bluetooth")
                     broadcastConfigChanged(context, "com.android.settings")
                     broadcastConfigChanged(context, "com.milink.service")

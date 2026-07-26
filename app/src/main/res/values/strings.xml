@@ -144,4 +144,13 @@
     <string name="restart_scope_summary">Select apps to restart with root.</string>
     <string name="restart_scope_success">Scope restarted</string>
     <string name="restart_scope_failed">Root restart failed</string>
+    <string name="manual_mac_binding">Manual Device Binding</string>
+    <string name="manual_mac_binding_summary">Bind earphones by MAC address for status bar icon and system popup, even without protocol support</string>
+    <string name="manual_mac_add">Add MAC Address</string>
+    <string name="manual_mac_hint">XX:XX:XX:XX:XX:XX</string>
+    <string name="manual_mac_empty">No devices bound. Add a MAC address to enable system integration for unsupported earphones.</string>
+    <string name="manual_mac_invalid">Invalid MAC address format</string>
+    <string name="manual_mac_duplicate">This MAC address is already bound</string>
+    <string name="manual_mac_remove">Remove</string>
+    <string name="manual_mac_help">Find your earphone MAC in: System Settings → Bluetooth → Device details → MAC address</string>
 </resources>
