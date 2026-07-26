@@ -154,20 +154,22 @@ object SettingsHeadsetHook : HookContext() {
         }.onFailure { Log.w(TAG, "hook HeadsetIDConstants.isBleMmaConnect(Service) skipped", it) }
     }
 
-    private fun hookServiceProxy() {
-        val proxyClass = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
-        hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { fakeSupport() }
-        hookProxyStringArgResult(proxyClass, "getDeviceInfo") { fakeSupport() }
-        hookProxyStringArgResult(proxyClass, "isSupportAudioSwitch") { "1" }
-        hookProxyStringArgResult(proxyClass, "setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java) { commandArgs ->
-            val command = commandArgs[0] as? Int
-            if (command == 102) "0" else "1"
-        }
-        hookProxyVoidDeviceNoop(proxyClass, "connect", BluetoothDevice::class.java)
-        hookProxyVoidDeviceNoop(proxyClass, "getDeviceConfig", BluetoothDevice::class.java)
-        hookProxyVoidDeviceStringNoop(proxyClass, "getCommonConfig", BluetoothDevice::class.java, String::class.java)
-        hookProxyBooleanStringResult(proxyClass, "isMiTWS") { true }
-        hookProxyBooleanStringResult(proxyClass, "checkIsMiTWS") { true }
+   private fun hookServiceProxy() {
+       val proxyClass = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
+       hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { fakeSupport() }
+        // These proxy methods take a String (address) arg on newer HyperOS.
+        // Try with String param first, fall back to no-arg variant.
+        hookProxyStringArgResultSafe(proxyClass, "getDeviceInfo", String::class.java) { fakeSupport() }
+        hookProxyStringArgResultSafe(proxyClass, "isSupportAudioSwitch", String::class.java) { "1" }
+       hookProxyStringArgResult(proxyClass, "setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java) { commandArgs ->
+           val command = commandArgs[0] as? Int
+           if (command == 102) "0" else "1"
+       }
+       hookProxyVoidDeviceNoop(proxyClass, "connect", BluetoothDevice::class.java)
+       hookProxyVoidDeviceNoop(proxyClass, "getDeviceConfig", BluetoothDevice::class.java)
+       hookProxyVoidDeviceStringNoop(proxyClass, "getCommonConfig", BluetoothDevice::class.java, String::class.java)
+       hookProxyBooleanStringResult(proxyClass, "isMiTWS") { true }
+       hookProxyBooleanStringResult(proxyClass, "checkIsMiTWS") { true }
         hookProxyBooleanStringResult(proxyClass, "getRingFindState") { false }
         hookProxyVoidDeviceCommand(proxyClass, "changeAncMode", Int::class.java, BluetoothDevice::class.java) { commandArgs ->
             val miMode = commandArgs[0] as? Int ?: return@hookProxyVoidDeviceCommand null
@@ -193,19 +195,62 @@ object SettingsHeadsetHook : HookContext() {
         }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
     }
 
-    private fun hookProxyStringArgResult(className: String, methodName: String, vararg parameterTypes: Class<*>, result: (List<Any?>) -> String) {
+   private fun hookProxyStringArgResult(className: String, methodName: String, vararg parameterTypes: Class<*>, result: (List<Any?>) -> String) {
+       runCatching {
+           hookBefore(findMethod(className, methodName, *parameterTypes)) {
+               val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
+               val address = args.firstOrNull { it is String } as? String
+               val isOppo = isSupportedPod(device) || (address != null && isKnownAddress(address))
+               if (methodName == "setCommonCommand") proxySetCommonCommandCalls++
+               Log.d(TAG, "$methodName proxy call#${if (methodName == "setCommonCommand") proxySetCommonCommandCalls else -1} args=${args.describeArgs()} device=${device.describe()} addressArg=$address isOppo=$isOppo")
+               if (!isOppo) return@hookBefore
+               this.result = result(args)
+               Log.d(TAG, "$methodName proxy forced result=${this.result} address=${device?.address ?: address}")
+           }
+       }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
+   }
+
+    /**
+     * Like [hookProxyStringArgResult] but tries multiple parameter type signatures.
+     * Different HyperOS versions may use different method signatures for the same
+     * proxy method (e.g. getDeviceInfo() vs getDeviceInfo(String)).
+     */
+    private fun hookProxyStringArgResultSafe(
+        className: String,
+        methodName: String,
+        vararg parameterTypes: Class<*>,
+        result: (List<Any?>) -> String,
+    ) {
+        // Try with specified params first
+        var hooked = false
         runCatching {
             hookBefore(findMethod(className, methodName, *parameterTypes)) {
                 val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
                 val address = args.firstOrNull { it is String } as? String
                 val isOppo = isSupportedPod(device) || (address != null && isKnownAddress(address))
-                if (methodName == "setCommonCommand") proxySetCommonCommandCalls++
-                Log.d(TAG, "$methodName proxy call#${if (methodName == "setCommonCommand") proxySetCommonCommandCalls else -1} args=${args.describeArgs()} device=${device.describe()} addressArg=$address isOppo=$isOppo")
+                Log.i(TAG, "$methodName proxy call args=${args.describeArgs()} device=${device.describe()} addressArg=$address isOppo=$isOppo")
                 if (!isOppo) return@hookBefore
                 this.result = result(args)
-                Log.d(TAG, "$methodName proxy forced result=${this.result} address=${device?.address ?: address}")
+                Log.i(TAG, "$methodName proxy forced result=${this.result} address=${device?.address ?: address}")
             }
-        }.onFailure { Log.w(TAG, "hook proxy $methodName skipped", it) }
+            hooked = true
+            Log.i(TAG, "hook proxy $methodName(${parameterTypes.joinToString { it.simpleName }}) installed")
+        }.onFailure {
+            Log.d(TAG, "hook proxy $methodName(${parameterTypes.joinToString { it.simpleName }}) not found, trying no-arg variant")
+        }
+        if (hooked) return
+        // Fall back to no-arg variant
+        runCatching {
+            hookBefore(findMethodByParamCount(className, methodName, 0)) {
+                val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
+                val isOppo = isSupportedPod(device)
+                Log.i(TAG, "$methodName proxy(no-arg) call device=${device.describe()} isOppo=$isOppo")
+                if (!isOppo) return@hookBefore
+                this.result = result(args)
+                Log.i(TAG, "$methodName proxy(no-arg) forced result=${this.result}")
+            }
+            Log.i(TAG, "hook proxy $methodName(no-arg) installed")
+        }.onFailure { Log.w(TAG, "hook proxy $methodName skipped (no matching signature)", it) }
     }
 
     private fun hookProxyBooleanStringResult(className: String, methodName: String, result: () -> Boolean) {
