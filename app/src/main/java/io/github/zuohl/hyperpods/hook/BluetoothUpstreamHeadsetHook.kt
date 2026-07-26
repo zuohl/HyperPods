@@ -272,18 +272,18 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                     sendRealStatusDelayed(lastOppoDevice, "register-refresh", 350L)
                 }
             }
-            hookBefore(binderClass.method("registerCallbackDevice", callbackClass, BluetoothDevice::class.java)) {
-                val callback = args[0]
-                val device = args[1] as? BluetoothDevice
-                if (!isSupportedPod(device) || callback == null) return@hookBefore
-                lastOppoDevice = device
-                rememberCallback(callback)
-                result = null
-                Log.d(TAG, "BinderC6776v.registerCallbackDevice swallowed callback=$callback device=${device.describe()}")
-                requestBluetoothStatus("registerCallbackDevice")
-                sendRealStatus(device, "registerCallbackDevice")
-                sendRealStatusDelayed(device, "registerCallbackDevice-refresh", 350L)
-            }
+           hookBefore(binderClass.method("registerCallbackDevice", callbackClass, BluetoothDevice::class.java)) {
+               val callback = args[0]
+               val device = args[1] as? BluetoothDevice
+               if (!isSupportedPod(device) || callback == null) return@hookBefore
+               lastOppoDevice = device
+               rememberCallback(callback)
+               result = null
+                Log.i(TAG, "registerCallbackDevice swallowed callback=$callback device=${device.describe()} callbacks=${callbacks.size}")
+               requestBluetoothStatus("registerCallbackDevice")
+               sendRealStatus(device, "registerCallbackDevice")
+               sendRealStatusDelayed(device, "registerCallbackDevice-refresh", 350L)
+           }
             hookBefore(binderClass.method("unregister", callbackClass, BluetoothDevice::class.java)) {
                 val callback = args[0]
                 val device = args[1] as? BluetoothDevice
@@ -644,14 +644,26 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         }
         val payload = realRefreshPayload()
         handler.post {
-            callbacks.values.toList().forEach { callback ->
+            val snapshot = callbacks.values.toList()
+            var alive = 0
+            snapshot.forEach { callback ->
+                val binder = runCatching { callMethod(callback, "asBinder") as? IBinder }.getOrNull()
+                if (binder != null && !binder.isBinderAlive) {
+                    forgetCallback(callback)
+                    Log.i(TAG, "sendRealStatus pruned dead callback reason=$reason callback=$callback")
+                    return@forEach
+                }
                 runCatching {
                     callMethod(callback, "refreshStatus", address, payload)
+                    alive++
                     Log.i(TAG, "sendRealStatus OK reason=$reason address=$address payload=$payload callbacks=${callbacks.size}")
                 }.onFailure {
                     forgetCallback(callback)
-                    Log.w(TAG, "send real refreshStatus failed reason=$reason callback=$callback", it)
+                    Log.w(TAG, "sendRealStatus failed, pruned reason=$reason callback=$callback", it)
                 }
+            }
+            if (alive == 0 && snapshot.isNotEmpty()) {
+                Log.i(TAG, "sendRealStatus all callbacks dead reason=$reason address=$address pruned=${snapshot.size}")
             }
         }
     }
