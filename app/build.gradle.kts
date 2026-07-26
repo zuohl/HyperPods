@@ -22,8 +22,12 @@ android {
         applicationId = "io.github.zuohl.hyperpods"
         minSdk = 33
         targetSdk = 37
-        versionCode = 14
-        versionName = "2.0.6"
+        versionCode = runCatching {
+            providers.exec {
+                commandLine("git", "rev-list", "--count", "HEAD")
+            }.standardOutput.asText.get().trim().toInt()
+        }.getOrDefault(200)
+        versionName = "2.1.0"
         buildConfigField("long", "BUILD_TIMESTAMP", System.currentTimeMillis().toString())
     }
 
