@@ -597,6 +597,29 @@ object QcyController {
             putExtra("case_charging", status.case?.isCharging == true)
             putExtra("case_connected", status.case?.isConnected == true)
         }
+        // Also broadcast to system processes that need battery data
+        // (com.android.settings, com.xiaomi.bluetooth) even when module UI is inactive.
+        // These processes have their own broadcast receivers in SettingsHeadsetHook
+        // and BluetoothUpstreamHeadsetHook that depend on this data.
+        val ctx = context ?: return
+        listOf("com.android.settings", "com.xiaomi.bluetooth", "com.milink.service").forEach { pkg ->
+            Intent(PodAction.ACTION_PODS_BATTERY_CHANGED).apply {
+                currentAddress?.let { putExtra("address", it) }
+                putExtra("status", status)
+                putExtra("left_battery", status.left?.battery ?: 0)
+                putExtra("left_charging", status.left?.isCharging == true)
+                putExtra("left_connected", status.left?.isConnected == true)
+                putExtra("right_battery", status.right?.battery ?: 0)
+                putExtra("right_charging", status.right?.isCharging == true)
+                putExtra("right_connected", status.right?.isConnected == true)
+                putExtra("case_battery", status.case?.battery ?: 0)
+                putExtra("case_charging", status.case?.isCharging == true)
+                putExtra("case_connected", status.case?.isConnected == true)
+                setPackage(pkg)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                ctx.sendBroadcast(this)
+            }
+        }
     }
 
     private fun sendCommand(packet: ByteArray) {

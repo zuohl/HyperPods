@@ -687,8 +687,36 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             currentAddress = it
             knownPodAddresses.add(it.uppercase())
         }
-        localSnapshot?.deviceName?.let { currentName = it }
-        return PodController.miuiRefreshPayload(battery, anc, transparencyVocalEnhancement)
+       localSnapshot?.deviceName?.let { currentName = it }
+        val payload = PodController.miuiRefreshPayload(battery, anc, transparencyVocalEnhancement)
+        // PodController.miuiRefreshPayload may return empty when activePod is null
+        // (e.g. in com.xiaomi.bluetooth process where connectPod was never called).
+        // Fall back to constructing the payload directly from local cached state.
+        if (payload.isEmpty() && (battery != null || currentAddress != null)) {
+            return buildLocalRefreshPayload(battery, anc, transparencyVocalEnhancement)
+        }
+        return payload
+    }
+
+    private fun buildLocalRefreshPayload(
+        battery: BatteryParams?,
+        anc: Int,
+        transparencyVocalEnhancement: Boolean,
+    ): String {
+        val values = MutableList(16) { "" }
+        values[0] = miuiBatteryValue(battery?.left)
+        values[1] = miuiBatteryValue(battery?.right)
+        values[2] = miuiBatteryValue(battery?.case)
+        values[7] = when (anc) {
+            3 -> if (transparencyVocalEnhancement) "0201" else "0200"
+            2, 4, 5, 6, 7, 8 -> "0100"
+            else -> "0000"
+        }
+        values[8] = "true"
+        values[11] = "00"
+        values[13] = "00"
+        values[14] = "00"
+        return values.joinToString(",")
     }
 
     private fun effectiveBattery(): BatteryParams? {
@@ -698,6 +726,12 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     private fun displayBattery(params: PodParams?): Int? {
         if (params?.isConnected != true) return null
         return params.battery.coerceIn(0, 100)
+    }
+
+    private fun miuiBatteryValue(params: PodParams?): String {
+        if (params?.isConnected != true) return "255"
+        val value = params.battery.coerceIn(0, 100)
+        return (if (params.isCharging) value or 128 else value).toString()
     }
 
     private fun displayWearState(battery: BatteryParams, fallback: Int): Int {
