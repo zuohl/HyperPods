@@ -242,12 +242,12 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                 val device = args[2] as? BluetoothDevice
                 if (!isSupportedPod(device)) return@hookBefore
                 lastOppoDevice = device
-                result = when (command) {
-                    102 -> "1"
-                    123 -> "4"
-                    else -> "1"
-                }
-                Log.d(TAG, "BinderC6776v.setCommonCommand forced command=$command value=$value device=${device.describe()} result=$result")
+               result = when (command) {
+                   102 -> "0"
+                   123 -> "4"
+                   else -> "1"
+               }
+               Log.d(TAG, "BinderC6776v.setCommonCommand forced command=$command value=$value device=${device.describe()} result=$result")
                 sendRealStatus(device, "setCommonCommand:$command")
             }
             Log.d(TAG, "BinderC6776v.setCommonCommand hook installed")
@@ -557,14 +557,14 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         if (!isOppo) return null
         lastOppoDevice = device
         reply.writeNoException()
-        reply.writeString(
-            when (command) {
-                102 -> "1"
-                123 -> "4"
-                else -> "1"
-            }
-        )
-        sendRealStatus(device, "setCommonCommand:$command")
+       reply.writeString(
+           when (command) {
+               102 -> "0"
+               123 -> "4"
+               else -> "1"
+           }
+       )
+       sendRealStatus(device, "setCommonCommand:$command")
         return true
     }
 
@@ -574,13 +574,14 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         val isOppo = isSupportedPod(device)
         Log.d(TAG, "getCommonConfig upstream type=$type device=${device.describe()} isOppo=$isOppo")
         if (!isOppo) return null
-        lastOppoDevice = device
-        reply.writeNoException()
-        sendRealStatus(device, "getCommonConfig:$type")
-        return true
-    }
+       lastOppoDevice = device
+       reply.writeNoException()
+       reply.writeString("")
+       sendRealStatus(device, "getCommonConfig:$type")
+       return true
+   }
 
-    private fun handleRegisterCallbackDevice(data: Parcel, reply: Parcel): Boolean? {
+   private fun handleRegisterCallbackDevice(data: Parcel, reply: Parcel): Boolean? {
         val callback = data.readCallbackBinder()
         val device = data.readDevice()
         val isOppo = isSupportedPod(device)
