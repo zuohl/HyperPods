@@ -113,3 +113,4 @@ jobs:
           artifacts: ${{ steps.sign.outputs.apk_path }}
           generateReleaseNotes: true
           makeLatest: true
+
