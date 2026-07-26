@@ -586,9 +586,9 @@ object SettingsHeadsetHook : HookContext() {
         values[0] = left
         values[1] = right
         values[2] = box
-        values[7] = settingsAncLevel()
-        values[8] = "false"
-        values[11] = "00"
+       values[7] = settingsAncLevel()
+        values[8] = "true"
+       values[11] = "00"
         values[13] = "00"
         values[14] = "00"
         return values.joinToString(",")
