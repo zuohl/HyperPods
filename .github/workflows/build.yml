@@ -14,10 +14,10 @@ jobs:
     permissions:
       contents: write
     steps:
-     - name: Checkout
-       uses: actions/checkout@v4
-       with:
-         fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java 21
         uses: actions/setup-java@v4
@@ -98,7 +98,6 @@ jobs:
             -F "document=@${APK_PATH}" \
             -F "caption=${CAPTION}" \
             | tee /tmp/tg_response.json
-          # Fail if Telegram returned an error
           if ! grep -q '"ok":true' /tmp/tg_response.json; then
             echo "Telegram send failed" >&2
             exit 1
@@ -113,4 +112,3 @@ jobs:
           artifacts: ${{ steps.sign.outputs.apk_path }}
           generateReleaseNotes: true
           makeLatest: true
-
