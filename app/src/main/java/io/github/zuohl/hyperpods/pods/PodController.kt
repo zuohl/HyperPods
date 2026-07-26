@@ -20,12 +20,14 @@ object PodController {
 
     fun connectPod(context: Context, device: BluetoothDevice, prefs: SharedPreferences, appRequested: Boolean = false) {
         val pod = selectPod(PodDetector.detectBrand(device))
+        io.github.zuohl.hyperpods.hook.Log.i("HyperPods-Router", "connectPod device=${device.address} name=${device.name} brand=${pod.brand} appRequested=$appRequested")
         activePod = pod
         pod.connectPod(context, device, prefs, appRequested)
     }
 
     fun disconnectedPod(context: Context, device: BluetoothDevice) {
         val pod = activePod ?: selectPod(PodDetector.detectBrand(device))
+        io.github.zuohl.hyperpods.hook.Log.i("HyperPods-Router", "disconnectedPod device=${device.address} brand=${pod.brand}")
         pod.disconnectedPod(context, device)
         if (PodDetector.detectBrand(device) == pod.brand) {
             activePod = null
@@ -47,7 +49,11 @@ object PodController {
 
     private fun selectPod(brand: PodBrand?): Pod = when (brand) {
         PodBrand.QCY -> QcyPod
-        PodBrand.VIVO -> QcyPod // TODO: replace with VivoPod once protocol lands
+        // vivo and other brands without a native protocol implementation use
+        // PassthroughPod — it maintains connection state without attempting
+        // GATT/RFCOMM, so the status bar icon and system popup persist without
+        // a protocol disconnect tearing down the UI.
+        PodBrand.VIVO -> PassthroughPod
         null -> QcyPod
     }
 

@@ -637,9 +637,9 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         handler.postDelayed({ sendRealStatus(address, reason) }, delayMs)
     }
 
-    private fun sendRealStatus(address: String, reason: String) {
+   private fun sendRealStatus(address: String, reason: String) {
         if (callbacks.isEmpty()) {
-            Log.d(TAG, "send real status skipped: no callback reason=$reason address=$address")
+            Log.i(TAG, "sendRealStatus skipped: no callback reason=$reason address=$address")
             return
         }
         val payload = realRefreshPayload()
@@ -647,7 +647,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             callbacks.values.toList().forEach { callback ->
                 runCatching {
                     callMethod(callback, "refreshStatus", address, payload)
-                    Log.d(TAG, "sent real refreshStatus reason=$reason address=$address payload=$payload callback=$callback")
+                    Log.i(TAG, "sendRealStatus OK reason=$reason address=$address payload=$payload callbacks=${callbacks.size}")
                 }.onFailure {
                     forgetCallback(callback)
                     Log.w(TAG, "send real refreshStatus failed reason=$reason callback=$callback", it)

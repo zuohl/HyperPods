@@ -49,6 +49,7 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     override fun onHook() {
+        Log.i(TAG, "SettingsHeadsetHook onHook() — com.android.settings hook active")
         hookActivityEntry()
         hookSupportChecks()
         hookServiceProxy()
@@ -370,6 +371,7 @@ object SettingsHeadsetHook : HookContext() {
         if (ctx == null || receiverRegistered) return
         context = ctx.applicationContext ?: ctx
         loadState()
+        Log.i(TAG, "registerStatusReceiver context=$context")
         val filter = IntentFilter().apply {
             addAction(PodAction.ACTION_PODS_CONNECTED)
             addAction(PodAction.ACTION_PODS_DISCONNECTED)
@@ -462,6 +464,7 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun injectFragmentStatus(fragment: Any?) {
+        Log.i(TAG, "injectFragmentStatus anc=$currentAnc battery=${settingsBatteryString()} address=$currentAddress")
         runCatching {
             val payload = "${settingsAncMode()}|0100;0101;0102;0103;0200;0201|${settingsBatteryString()}|00"
             Log.d(TAG, "injectFragmentStatus payload=$payload ${fragmentDebug(fragment)}")
