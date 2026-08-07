@@ -26,6 +26,7 @@ enum class PodBrand {
 data class PodStatusSnapshot(
     val battery: BatteryParams?,
     val anc: Int,
+    val transparencyVocalEnhancement: Boolean,
     val address: String?,
     val deviceName: String?,
     val connected: Boolean,

@@ -24,9 +24,11 @@ object OppoPod : Pod {
     }
 
     override fun currentStatusSnapshot(): PodStatusSnapshot {
+        val anc = RfcommController.currentAncMode()
         return PodStatusSnapshot(
             battery = RfcommController.currentBatterySnapshotCompat(),
-            anc = RfcommController.currentAncMode(),
+            anc = anc,
+            transparencyVocalEnhancement = anc == 3,
             address = RfcommController.currentDeviceAddress(),
             deviceName = RfcommController.currentDeviceName(),
             connected = RfcommController.isPodConnectedNow(),

@@ -49,4 +49,20 @@ object OppoPodsAction {
     const val EXTRA_BT_LOG_IS_SEND = "is_send"
     const val EXTRA_BT_LOG_HEX = "hex"
     const val EXTRA_BT_LOG_LABEL = "label"
+
+    // ---- QCY / multi-brand actions (shared cross-process contract) ----
+    const val ACTION_PODS_UI_CLOSED = "chen.action.oppopods.pods_ui_closed"
+    const val ACTION_PODS_CONNECTION_STATE_CHANGED = "chen.action.oppopods.pods_connection_state_changed"
+    const val ACTION_ADAPTIVE_VOLUME_SET = "chen.action.oppopods.adaptive_volume_set"
+    const val ACTION_PODS_ADAPTIVE_VOLUME_CHANGED = "chen.action.oppopods.pods_adaptive_volume_changed"
+    const val ACTION_CUSTOM_EQ_SET = "chen.action.oppopods.custom_eq_set"
+    const val ACTION_PODS_CUSTOM_EQ_CHANGED = "chen.action.oppopods.pods_custom_eq_changed"
+    const val ACTION_DYNAMIC_EQ_SET = "chen.action.oppopods.dynamic_eq_set"
+    const val ACTION_PODS_DYNAMIC_EQ_CHANGED = "chen.action.oppopods.pods_dynamic_eq_changed"
+    const val ACTION_LDAC_SET = "chen.action.oppopods.ldac_set"
+    const val ACTION_PODS_LDAC_CHANGED = "chen.action.oppopods.pods_ldac_changed"
+    const val ACTION_SLEEP_MODE_SET = "chen.action.oppopods.sleep_mode_set"
+    const val ACTION_PODS_SLEEP_MODE_CHANGED = "chen.action.oppopods.pods_sleep_mode_changed"
+    const val ACTION_DUAL_DEVICE_CONNECTION_SET = "chen.action.oppopods.dual_device_connection_set"
+    const val ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED = "chen.action.oppopods.pods_dual_device_connection_changed"
 }

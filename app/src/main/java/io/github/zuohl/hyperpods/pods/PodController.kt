@@ -55,14 +55,16 @@ object PodController {
 
     private fun selectPod(brand: PodBrand?): Pod? = when (brand) {
         PodBrand.OPPO -> OppoPod
-        // QCY / VIVO / GENERIC controllers are wired in during the multi-brand merge.
-        PodBrand.QCY, PodBrand.VIVO, PodBrand.GENERIC -> null
+        PodBrand.QCY -> QcyPod
+        PodBrand.VIVO -> PassthroughPod
+        PodBrand.GENERIC -> PassthroughPod
         null -> null
     }
 
     private fun emptySnapshot(): PodStatusSnapshot = PodStatusSnapshot(
         battery = null,
         anc = 1,
+        transparencyVocalEnhancement = false,
         address = null,
         deviceName = null,
         connected = false,
