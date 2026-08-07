@@ -149,7 +149,9 @@ object QcyController {
                     setAdaptiveVolume(intent.getBooleanExtra("enabled", false))
                 }
                 OppoPodsAction.ACTION_EQ_PRESET_SET -> {
-                    setEqPreset(intent.getIntExtra("preset", currentEqPreset))
+                    // Upstream UI sends "id" (OPPO convention); keep "preset" fallback.
+                    val preset = intent.getIntExtra("id", intent.getIntExtra("preset", currentEqPreset))
+                    setEqPreset(preset)
                 }
                 OppoPodsAction.ACTION_CUSTOM_EQ_SET -> {
                     setCustomEq(intent.getIntArrayExtra("gains") ?: currentCustomEqGains)
