@@ -43,6 +43,19 @@ object PodDetector {
         return detectBrand(device) != null
     }
 
+    /**
+     * Name-keyword only check (no address / permission access), for callers that
+     * have a headset name but no [BluetoothDevice] (e.g. MiLink headset info).
+     */
+    fun isSupportedPodByName(name: String?): Boolean {
+        val lower = name?.lowercase().orEmpty()
+        if (lower.isBlank()) return false
+        if (oppoNameKeywords.any { it in lower }) return true
+        if (qcyNameKeywords.any { it in lower }) return true
+        if (vivoNameKeywords.any { it in lower }) return true
+        return false
+    }
+
     @SuppressLint("MissingPermission")
     fun isQcyAppDevice(device: BluetoothDevice?): Boolean {
         val name = buildList {

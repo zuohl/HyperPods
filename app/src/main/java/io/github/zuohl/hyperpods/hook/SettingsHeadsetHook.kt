@@ -12,6 +12,7 @@ import android.os.Looper
 import android.util.Log
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.MilinkSpatialAudioOptionSettings
+import io.github.zuohl.hyperpods.pods.PodDetector
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey
@@ -25,7 +26,7 @@ object SettingsHeadsetHook : HookContext() {
     private const val FAKE_SUPPORT = "$FAKE_DEVICE_ID,000000000000000010000000"
     private const val PREFS_NAME = "oppopods_milink_state"
     private const val SETTINGS_REFRESH_INTERVAL_MS = 3_000L
-    private val knownOppoAddresses = linkedSetOf<String>()
+    private val knownPodAddresses = linkedSetOf<String>()
     private val batteryViews = WeakHashMap<Any, BluetoothDevice>()
     private val headsetFragments = WeakHashMap<Any, Boolean>()
     private var context: Context? = null
@@ -78,8 +79,8 @@ object SettingsHeadsetHook : HookContext() {
                 registerStatusReceiver(activity)
                 val intent = callMethod(instance, "getIntent") as? Intent ?: return@hookBefore
                 val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
-                Log.d(TAG, "Activity.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownOppoAddresses current=$currentAddress")
-                if (!isOppoPod(device)) return@hookBefore
+                Log.d(TAG, "Activity.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownPodAddresses current=$currentAddress")
+                if (!isSupportedPod(device)) return@hookBefore
                 intent.putExtra("MIUI_HEADSET_SUPPORT", FAKE_SUPPORT)
                 intent.putExtra("COME_FROM", intent.getStringExtra("COME_FROM") ?: "MIUI_BLUETOOTH_SETTINGS")
                 intent.putExtra("DEVICE_ID", FAKE_DEVICE_ID)
@@ -95,8 +96,8 @@ object SettingsHeadsetHook : HookContext() {
                 registerStatusReceiver(activity)
                 val intent = callMethod(instance, "getIntent") as? Intent ?: return@hookBefore
                 val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
-                Log.d(TAG, "Plugin.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownOppoAddresses current=$currentAddress")
-                if (!isOppoPod(device)) return@hookBefore
+                Log.d(TAG, "Plugin.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownPodAddresses current=$currentAddress")
+                if (!isSupportedPod(device)) return@hookBefore
                 intent.putExtra("MIUI_HEADSET_SUPPORT", FAKE_SUPPORT)
                 intent.putExtra("DEVICE_ID", FAKE_DEVICE_ID)
                 Log.d(TAG, "MiuiHeadsetActivityPlugin intent patched address=${device?.address}")
@@ -108,8 +109,8 @@ object SettingsHeadsetHook : HookContext() {
         runCatching {
             hookAfter(findMethodByParamCount("com.android.settings.bluetooth.MiuiHeadsetActivity", methodName, 0)) {
                 val device = runCatching { getObjectField(instance, "mDevice") as? BluetoothDevice }.getOrNull()
-                Log.d(TAG, "Activity.$methodName old=$result device=${device.describe()} isOppo=${isOppoPod(device)}")
-                if (!isOppoPod(device)) return@hookAfter
+                Log.d(TAG, "Activity.$methodName old=$result device=${device.describe()} isOppo=${isSupportedPod(device)}")
+                if (!isSupportedPod(device)) return@hookAfter
                 result = value()
                 Log.d(TAG, "Activity.$methodName forced=$result")
             }
@@ -144,7 +145,7 @@ object SettingsHeadsetHook : HookContext() {
                 val device = args[1] as? BluetoothDevice
                 val deviceId = args[2] as? String
                 Log.d(TAG, "isBleMmaConnect(Context) old=$result device=${device.describe()} deviceId=$deviceId service=${runCatching { callMethod(args[0], "getService") }.getOrNull()}")
-                if (deviceId == FAKE_DEVICE_ID || isOppoPod(device)) {
+                if (deviceId == FAKE_DEVICE_ID || isSupportedPod(device)) {
                     result = true
                     Log.d(TAG, "isBleMmaConnect(Context) forced true")
                 }
@@ -159,7 +160,7 @@ object SettingsHeadsetHook : HookContext() {
                 val device = args[1] as? BluetoothDevice
                 val deviceId = args[2] as? String
                 Log.d(TAG, "isBleMmaConnect(Service) old=$result service=${args[0]} device=${device.describe()} deviceId=$deviceId")
-                if (deviceId == FAKE_DEVICE_ID || isOppoPod(device)) {
+                if (deviceId == FAKE_DEVICE_ID || isSupportedPod(device)) {
                     result = true
                     Log.d(TAG, "isBleMmaConnect(Service) forced true")
                 }
@@ -198,7 +199,7 @@ object SettingsHeadsetHook : HookContext() {
         runCatching {
             hookBefore(findMethod(className, methodName, *parameterTypes)) {
                 val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
-                val isOppo = isOppoPod(device)
+                val isOppo = isSupportedPod(device)
                 if (methodName == "checkSupport") proxyCheckSupportCalls++
                 Log.d(TAG, "$methodName proxy call#${if (methodName == "checkSupport") proxyCheckSupportCalls else -1} device=${device.describe()} isOppo=$isOppo")
                 if (!isOppo) return@hookBefore
@@ -213,7 +214,7 @@ object SettingsHeadsetHook : HookContext() {
             hookBefore(findMethod(className, methodName, *parameterTypes)) {
                 val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
                 val address = args.firstOrNull { it is String } as? String
-                val isOppo = isOppoPod(device) || (address != null && isOppoAddress(address))
+                val isOppo = isSupportedPod(device) || (address != null && isKnownPodAddress(address))
                 if (methodName == "setCommonCommand") proxySetCommonCommandCalls++
                 Log.d(TAG, "$methodName proxy call#${if (methodName == "setCommonCommand") proxySetCommonCommandCalls else -1} args=${args.describeArgs()} device=${device.describe()} addressArg=$address isOppo=$isOppo")
                 if (!isOppo) return@hookBefore
@@ -227,8 +228,8 @@ object SettingsHeadsetHook : HookContext() {
         runCatching {
             hookBefore(findMethod(className, methodName, String::class.java)) {
                 val address = args[0] as? String ?: return@hookBefore
-                val isOppo = isOppoAddress(address)
-                Log.d(TAG, "$methodName proxy string call address=$address isOppo=$isOppo oldKnown=$knownOppoAddresses current=$currentAddress")
+                val isOppo = isKnownPodAddress(address)
+                Log.d(TAG, "$methodName proxy string call address=$address isOppo=$isOppo oldKnown=$knownPodAddresses current=$currentAddress")
                 if (!isOppo) return@hookBefore
                 this.result = result()
                 Log.d(TAG, "$methodName proxy forced result=${this.result} address=$address")
@@ -240,8 +241,8 @@ object SettingsHeadsetHook : HookContext() {
         runCatching {
             hookBefore(findMethod(className, methodName, *parameterTypes)) {
                 val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
-                Log.d(TAG, "$methodName proxy command args=${args.describeArgs()} device=${device.describe()} isOppo=${isOppoPod(device)}")
-                if (!isOppoPod(device)) return@hookBefore
+                Log.d(TAG, "$methodName proxy command args=${args.describeArgs()} device=${device.describe()} isOppo=${isSupportedPod(device)}")
+                if (!isSupportedPod(device)) return@hookBefore
                 val oppoMode = mode(args) ?: return@hookBefore
                 currentAnc = oppoMode
                 sendOppoAnc(oppoMode)
@@ -257,7 +258,7 @@ object SettingsHeadsetHook : HookContext() {
             hookBefore(findMethod(className, methodName, *parameterTypes)) {
                 val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
                 if (methodName == "getDeviceConfig") proxyGetDeviceConfigCalls++
-                val isOppo = isOppoPod(device)
+                val isOppo = isSupportedPod(device)
                 Log.d(TAG, "$methodName proxy before#${if (methodName == "getDeviceConfig") proxyGetDeviceConfigCalls else -1} device=${device.describe()} isOppo=$isOppo")
                 if (!isOppo) return@hookBefore
                 this.result = null
@@ -271,7 +272,7 @@ object SettingsHeadsetHook : HookContext() {
             hookBefore(findMethod(className, methodName, *parameterTypes)) {
                 val device = args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
                 proxyGetCommonConfigCalls++
-                val isOppo = isOppoPod(device)
+                val isOppo = isSupportedPod(device)
                 Log.d(TAG, "$methodName proxy before#$proxyGetCommonConfigCalls args=${args.describeArgs()} device=${device.describe()} isOppo=$isOppo")
                 if (!isOppo) return@hookBefore
                 this.result = null
@@ -286,8 +287,8 @@ object SettingsHeadsetHook : HookContext() {
                 val device = args[0] as? BluetoothDevice ?: return@hookConstructorAfter
                 val ctx = args[1] as? Context
                 registerStatusReceiver(ctx)
-                Log.d(TAG, "Battery.<init> device=${device.describe()} isOppo=${isOppoPod(device)} ctx=$ctx currentBattery=${settingsBatteryString()}")
-                if (!isOppoPod(device)) return@hookConstructorAfter
+                Log.d(TAG, "Battery.<init> device=${device.describe()} isOppo=${isSupportedPod(device)} ctx=$ctx currentBattery=${settingsBatteryString()}")
+                if (!isSupportedPod(device)) return@hookConstructorAfter
                 batteryViews[instance ?: return@hookConstructorAfter] = device
                 requestBluetoothStatus("battery-init")
                 updateBatteryView(instance)
@@ -298,8 +299,8 @@ object SettingsHeadsetHook : HookContext() {
         runCatching {
             hookBefore(findMethod("com.android.settings.bluetooth.tws.MiuiHeadsetBattery", "onBatteryChanged", String::class.java)) {
                 val device = batteryViews[instance]
-                Log.d(TAG, "Battery.onBatteryChanged(String) original=${args[0]} mappedDevice=${device.describe()} isOppo=${isOppoPod(device)} forced=${settingsBatteryString()}")
-                if (!isOppoPod(device)) return@hookBefore
+                Log.d(TAG, "Battery.onBatteryChanged(String) original=${args[0]} mappedDevice=${device.describe()} isOppo=${isSupportedPod(device)} forced=${settingsBatteryString()}")
+                if (!isSupportedPod(device)) return@hookBefore
                 result = null
                 updateBatteryView(instance)
             }
@@ -404,12 +405,12 @@ object SettingsHeadsetHook : HookContext() {
                     OppoPodsAction.ACTION_PODS_CONNECTED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
                         currentName = intent.getStringExtra("device_name") ?: currentName
-                        currentAddress?.let { knownOppoAddresses.add(it.uppercase()) }
+                        currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
                     }
                     OppoPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
                         currentBattery = intent.batteryStatusCompat() ?: currentBattery
-                        currentAddress?.let { knownOppoAddresses.add(it.uppercase()) }
+                        currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
                         saveState(context)
                         updateBatteryViews()
                         updateFragments()
@@ -417,7 +418,7 @@ object SettingsHeadsetHook : HookContext() {
                     OppoPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
                         currentAnc = intent.getIntExtra("status", currentAnc)
-                        currentAddress?.let { knownOppoAddresses.add(it.uppercase()) }
+                        currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
                         saveState(context)
                         updateFragments()
                     }
@@ -493,19 +494,18 @@ object SettingsHeadsetHook : HookContext() {
         val device = runCatching { getObjectField(fragment, "mDevice") as? BluetoothDevice }.getOrNull()
         val deviceId = runCatching { getObjectField(fragment, "mDeviceId") as? String }.getOrNull()
         val support = runCatching { getObjectField(fragment, "mSupport") as? String }.getOrNull()
-        return isOppoPod(device) || deviceId == FAKE_DEVICE_ID || support?.startsWith(FAKE_DEVICE_ID) == true
+        return isSupportedPod(device) || deviceId == FAKE_DEVICE_ID || support?.startsWith(FAKE_DEVICE_ID) == true
     }
 
-    private fun isOppoPod(device: BluetoothDevice?): Boolean {
+    private fun isSupportedPod(device: BluetoothDevice?): Boolean {
         if (device == null) return false
         val address = runCatching { device.address }.getOrNull()
-        if (address != null && isOppoAddress(address)) return true
-        val name = runCatching { device.name ?: device.alias }.getOrNull().orEmpty()
-        val result = name.contains("oppo", ignoreCase = true)
+        if (address != null && isKnownPodAddress(address)) return true
+        val result = PodDetector.isSupportedPod(device)
         if (result && address != null) {
-            knownOppoAddresses.add(address.uppercase())
+            knownPodAddresses.add(address.uppercase())
             currentAddress = address
-            currentName = name
+            currentName = runCatching { device.name ?: device.alias }.getOrNull().orEmpty()
         }
         return result
     }
@@ -541,9 +541,9 @@ object SettingsHeadsetHook : HookContext() {
         return "fragment(device=${device.describe()},deviceId=$deviceId,support=$support,service=$service,hfp=$hfp,cached=$cached,supportAnc=$supportAnc,ancCached=$ancCached,pendingAnc=$pendingAnc,ancPending=$ancPendingStatus)"
     }
 
-    private fun isOppoAddress(address: String): Boolean {
+    private fun isKnownPodAddress(address: String): Boolean {
         val normalized = address.uppercase()
-        return normalized == currentAddress?.uppercase() || normalized in knownOppoAddresses
+        return normalized == currentAddress?.uppercase() || normalized in knownPodAddresses
     }
 
     private fun refreshMilinkSpatialAudioOption(intent: Intent? = null) {
@@ -680,7 +680,7 @@ object SettingsHeadsetHook : HookContext() {
         currentAddress = prefs.getString("address", currentAddress)
         currentName = prefs.getString("name", currentName)
         currentAnc = prefs.getInt("anc", currentAnc)
-        currentAddress?.let { knownOppoAddresses.add(it.uppercase()) }
+        currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
         if (!hasSavedBattery && hasCurrentBattery()) return
         currentBattery = BatteryParams(
             left = PodParams(

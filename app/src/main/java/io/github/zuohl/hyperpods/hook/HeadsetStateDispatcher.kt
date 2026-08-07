@@ -82,12 +82,4 @@ object HeadsetStateDispatcher : HookContext() {
         notificationSettingsReceiverRegistered = true
     }
 
-    /**
-     * Detect OPPO earphones by checking if the device name contains "oppo" (case insensitive).
-     */
-    @SuppressLint("MissingPermission")
-    fun isOppoPod(device: BluetoothDevice): Boolean {
-        val name = device.name ?: return false
-        return name.contains("oppo", ignoreCase = true)
-    }
 }
