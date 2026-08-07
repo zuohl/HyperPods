@@ -157,4 +157,17 @@
     <string name="debug_log_send">发送</string>
     <string name="debug_log_recv">接收</string>
     <string name="debug_no_log">暂无日志</string>
+    <string name="disguise_model">伪装设备型号</string>
+    <string name="disguise_model_summary">系统详情页/图标显示的型号 ID（空 = 默认）</string>
+    <string name="custom_option">自定义</string>
+    <string name="dual_device_connection">双设备连接</string>
+    <string name="ldac">LDAC</string>
+    <string name="ldac_summary">高音质编码；开启可能会重启耳机并关闭双设备连接</string>
+    <string name="dynamic_eq">动态 EQ</string>
+    <string name="sleep_mode">睡眠模式</string>
+    <string name="sleep_mode_summary">屏蔽触摸功能，耳机放回充电仓后自动退出</string>
+    <string name="adaptive_volume">自适应音量</string>
+    <string name="enabled">开启</string>
+    <string name="open_system_headset_settings">打开系统耳机设置</string>
+    <string name="open_system_headset_settings_summary">跳转到系统蓝牙详情页（ANC / LDAC）</string>
 </resources>

@@ -12,6 +12,7 @@ import android.os.Looper
 import android.util.Log
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.MilinkSpatialAudioOptionSettings
+import io.github.zuohl.hyperpods.config.FakeDeviceConfig
 import io.github.zuohl.hyperpods.pods.PodDetector
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
@@ -22,8 +23,8 @@ import java.util.WeakHashMap
 @SuppressLint("MissingPermission")
 object SettingsHeadsetHook : HookContext() {
     private const val TAG = "OppoPods-Settings"
-    private const val FAKE_DEVICE_ID = "01011604"
-    private const val FAKE_SUPPORT = "$FAKE_DEVICE_ID,111111001111000110101000"
+    private val fakeDeviceId: String get() = FakeDeviceConfig.deviceId(prefs)
+    private val fakeSupport: String get() = FakeDeviceConfig.support(prefs)
     private const val PREFS_NAME = "oppopods_milink_state"
     private const val SETTINGS_REFRESH_INTERVAL_MS = 3_000L
     private val knownPodAddresses = linkedSetOf<String>()
@@ -81,13 +82,13 @@ object SettingsHeadsetHook : HookContext() {
                 val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
                 Log.d(TAG, "Activity.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownPodAddresses current=$currentAddress")
                 if (!isSupportedPod(device)) return@hookBefore
-                intent.putExtra("MIUI_HEADSET_SUPPORT", FAKE_SUPPORT)
+                intent.putExtra("MIUI_HEADSET_SUPPORT", fakeSupport)
                 intent.putExtra("COME_FROM", intent.getStringExtra("COME_FROM") ?: "MIUI_BLUETOOTH_SETTINGS")
-                intent.putExtra("DEVICE_ID", FAKE_DEVICE_ID)
+                intent.putExtra("DEVICE_ID", fakeDeviceId)
                 Log.d(TAG, "MiuiHeadsetActivity intent patched address=${device?.address}")
             }
-            hookActivityStringGetter("getDeviceID") { FAKE_DEVICE_ID }
-            hookActivityStringGetter("getSupport") { FAKE_SUPPORT }
+            hookActivityStringGetter("getDeviceID") { fakeDeviceId }
+            hookActivityStringGetter("getSupport") { fakeSupport }
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetActivity skipped", it) }
 
         runCatching {
@@ -98,8 +99,8 @@ object SettingsHeadsetHook : HookContext() {
                 val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
                 Log.d(TAG, "Plugin.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownPodAddresses current=$currentAddress")
                 if (!isSupportedPod(device)) return@hookBefore
-                intent.putExtra("MIUI_HEADSET_SUPPORT", FAKE_SUPPORT)
-                intent.putExtra("DEVICE_ID", FAKE_DEVICE_ID)
+                intent.putExtra("MIUI_HEADSET_SUPPORT", fakeSupport)
+                intent.putExtra("DEVICE_ID", fakeDeviceId)
                 Log.d(TAG, "MiuiHeadsetActivityPlugin intent patched address=${device?.address}")
             }
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetActivityPlugin skipped", it) }
@@ -119,9 +120,9 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun hookSupportChecks() {
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "checkSupport") { support ->
-            support.startsWith(FAKE_DEVICE_ID) || support.contains(FAKE_DEVICE_ID)
+            support.startsWith(fakeDeviceId) || support.contains(fakeDeviceId)
         }
-        hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isTWS01Headset") { it == FAKE_DEVICE_ID }
+        hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isTWS01Headset") { it == fakeDeviceId }
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isK77sHeadset") { false }
         hookBleMmaConnectByContext()
         hookBleMmaConnectByService()
@@ -132,7 +133,7 @@ object SettingsHeadsetHook : HookContext() {
             hookAfter(findMethod(className, methodName, String::class.java)) {
                 val value = args[0] as? String ?: return@hookAfter
                 Log.d(TAG, "$className.$methodName value=$value old=$result")
-                if (value != FAKE_DEVICE_ID && !value.startsWith(FAKE_DEVICE_ID)) return@hookAfter
+                if (value != fakeDeviceId && !value.startsWith(fakeDeviceId)) return@hookAfter
                 result = resultForValue(value)
                 Log.d(TAG, "$className.$methodName forced value=$value result=$result")
             }
@@ -145,7 +146,7 @@ object SettingsHeadsetHook : HookContext() {
                 val device = args[1] as? BluetoothDevice
                 val deviceId = args[2] as? String
                 Log.d(TAG, "isBleMmaConnect(Context) old=$result device=${device.describe()} deviceId=$deviceId service=${runCatching { callMethod(args[0], "getService") }.getOrNull()}")
-                if (deviceId == FAKE_DEVICE_ID || isSupportedPod(device)) {
+                if (deviceId == fakeDeviceId || isSupportedPod(device)) {
                     result = true
                     Log.d(TAG, "isBleMmaConnect(Context) forced true")
                 }
@@ -160,7 +161,7 @@ object SettingsHeadsetHook : HookContext() {
                 val device = args[1] as? BluetoothDevice
                 val deviceId = args[2] as? String
                 Log.d(TAG, "isBleMmaConnect(Service) old=$result service=${args[0]} device=${device.describe()} deviceId=$deviceId")
-                if (deviceId == FAKE_DEVICE_ID || isSupportedPod(device)) {
+                if (deviceId == fakeDeviceId || isSupportedPod(device)) {
                     result = true
                     Log.d(TAG, "isBleMmaConnect(Service) forced true")
                 }
@@ -170,8 +171,8 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun hookServiceProxy() {
         val proxyClass = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
-        hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { FAKE_SUPPORT }
-        hookProxyStringArgResult(proxyClass, "getDeviceInfo") { FAKE_SUPPORT }
+        hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { fakeSupport }
+        hookProxyStringArgResult(proxyClass, "getDeviceInfo") { fakeSupport }
         hookProxyStringArgResult(proxyClass, "isSupportAudioSwitch") {
             if (milinkSpatialAudioOptionEnabled) "1" else "0"
         }
@@ -494,7 +495,7 @@ object SettingsHeadsetHook : HookContext() {
         val device = runCatching { getObjectField(fragment, "mDevice") as? BluetoothDevice }.getOrNull()
         val deviceId = runCatching { getObjectField(fragment, "mDeviceId") as? String }.getOrNull()
         val support = runCatching { getObjectField(fragment, "mSupport") as? String }.getOrNull()
-        return isSupportedPod(device) || deviceId == FAKE_DEVICE_ID || support?.startsWith(FAKE_DEVICE_ID) == true
+        return isSupportedPod(device) || deviceId == fakeDeviceId || support?.startsWith(fakeDeviceId) == true
     }
 
     private fun isSupportedPod(device: BluetoothDevice?): Boolean {

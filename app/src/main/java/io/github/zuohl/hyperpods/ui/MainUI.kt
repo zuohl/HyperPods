@@ -3,6 +3,8 @@ package io.github.zuohl.hyperpods.ui
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -50,6 +52,8 @@ import io.github.zuohl.hyperpods.MainActivity
 import io.github.zuohl.hyperpods.R
 import io.github.zuohl.hyperpods.pods.AppRfcommController
 import io.github.zuohl.hyperpods.pods.BtLogStore
+import io.github.zuohl.hyperpods.pods.PodBrand
+import io.github.zuohl.hyperpods.pods.PodDetector
 import io.github.zuohl.hyperpods.pods.CustomButtonFunction
 import io.github.zuohl.hyperpods.pods.CustomButtonPosition
 import io.github.zuohl.hyperpods.pods.DeviceProfile
@@ -96,6 +100,58 @@ sealed interface Screen : NavKey {
     data object Equalizer : Screen
     data object Debug : Screen
     data object DebugLog : Screen
+}
+
+@SuppressLint("MissingPermission")
+private fun connectedSupportedDevice(context: Context): BluetoothDevice? {
+    val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return null
+    return buildList {
+        addAll(runCatching { manager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
+        addAll(runCatching { manager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+    }.distinctBy { it.address }.firstOrNull { PodDetector.isSupportedPod(it) }
+}
+
+/**
+ * Opens the brand's official app (full native controls: LDAC, dual device, dynamic EQ,
+ * game mode...), falling back to the system MiuiHeadsetActivity when the brand app isn't
+ * installed or the device isn't a known brand.
+ */
+private fun openNativeHeadsetSettings(context: Context) {
+    val device = connectedSupportedDevice(context)
+    val brand = device?.let { PodDetector.detectBrand(it) }
+    val pkg = when (brand) {
+        PodBrand.QCY -> "com.qcy.audio"
+        PodBrand.VIVO -> "com.vivo.vivotws"
+        else -> null
+    }
+    if (pkg != null) {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
+        if (launchIntent != null) {
+            runCatching {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launchIntent)
+            }.onFailure { Log.w("HyperPods-MainUI", "launch $pkg failed", it) }
+            return
+        }
+    }
+    launchSystemHeadsetPage(context)
+}
+
+@SuppressLint("MissingPermission")
+private fun launchSystemHeadsetPage(context: Context) {
+    val device = connectedSupportedDevice(context) ?: return
+    val intent = Intent().apply {
+        setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
+        putExtra("android.bluetooth.device.extra.DEVICE", device)
+        putExtra("bluetoothaddress", runCatching { device.address }.getOrNull())
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    if (context.packageManager.resolveActivity(intent, 0) == null) {
+        Log.w("HyperPods-MainUI", "system headset page not resolvable")
+        return
+    }
+    runCatching { context.startActivity(intent) }
+        .onFailure { Log.w("HyperPods-MainUI", "open system headset page failed", it) }
 }
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -775,7 +831,8 @@ fun MainUI(
                             smartAncLevel = displaySmartAncLevel,
                             onNoiseLevelChange = { setNoiseLevel(it) },
                             homeImageFile = PodImageStore.customFile(context, PodImageSlot.HOME_IMAGE),
-                            onOpenMoreSettings = { backStack.add(Screen.MoreSettings) }
+                            onOpenMoreSettings = { backStack.add(Screen.MoreSettings) },
+                            onOpenSystemSettings = { openNativeHeadsetSettings(context) }
                         )
                         "connecting" -> Box(Modifier.padding(padding).fillMaxSize()) { ConnectingPage() }
                         "error" -> Box(Modifier.padding(padding).fillMaxSize()) { ErrorPage(onRetry = { appController.disconnect() }) }

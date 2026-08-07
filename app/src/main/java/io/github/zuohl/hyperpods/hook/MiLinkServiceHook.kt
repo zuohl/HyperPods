@@ -22,6 +22,7 @@ import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.MilinkSpatialAudioOptionSettings
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey
+import io.github.zuohl.hyperpods.config.FakeDeviceConfig
 import io.github.zuohl.hyperpods.pods.PodDetector
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.batteryStatusCompat
@@ -31,7 +32,7 @@ import java.util.concurrent.CompletableFuture
 @SuppressLint("MissingPermission")
 object MiLinkServiceHook : HookContext() {
     private const val TAG = "OppoPods-MiLink"
-    private const val FAKE_DEVICE_ID = "01011604"
+    private val fakeDeviceId: String get() = FakeDeviceConfig.deviceId(prefs)
     private const val PREFS_NAME = "oppopods_milink_state"
     private const val PANEL_REFRESH_THROTTLE_MS = 5_000L
     private const val FIND_RING_IDLE = 0
@@ -199,7 +200,7 @@ object MiLinkServiceHook : HookContext() {
         )
         classes.forEach { className ->
             hookBluetoothDeviceResult(className, "checkIsMiTWS") { 1 }
-            hookBluetoothDeviceResult(className, "getDeviceId") { FAKE_DEVICE_ID }
+            hookBluetoothDeviceResult(className, "getDeviceId") { fakeDeviceId }
             hookBluetoothDeviceResult(className, "getBatteryLevel") { 1 }
             hookBluetoothDeviceResult(className, "getAncState") { miLinkAncState() }
             hookBluetoothDeviceResult(className, "getDeviceRunInfo") { 0 }
@@ -219,11 +220,11 @@ object MiLinkServiceHook : HookContext() {
     }
 
     private fun hookHeadsetRuntimeDisplay() {
-        hookBluetoothDeviceResult("com.miui.headset.runtime.ProfileContext", "getDeviceId") { FAKE_DEVICE_ID }
+        hookBluetoothDeviceResult("com.miui.headset.runtime.ProfileContext", "getDeviceId") { fakeDeviceId }
         hookBluetoothDeviceResult("com.miui.headset.runtime.ProfileContext", "getBatteryLevel", reconnectOnRead = true) { miLinkBatteryLevels() }
         hookBluetoothDeviceResult("com.miui.headset.runtime.ProfileContext", "getFindRingState") { miLinkFindRingState() }
         hookBluetoothDeviceResult("com.miui.headset.runtime.ProfileContext", "getAudioSpatialEffectState") { miLinkSpatialMode() }
-        hookBluetoothDeviceResult("com.miui.headset.runtime.AncBatteryController", "getDeviceId") { FAKE_DEVICE_ID }
+        hookBluetoothDeviceResult("com.miui.headset.runtime.AncBatteryController", "getDeviceId") { fakeDeviceId }
         hookBluetoothDeviceResult("com.miui.headset.runtime.AncBatteryController", "getAncState") { miLinkAncState() }
         hookBluetoothDeviceResult("com.miui.headset.runtime.AncBatteryController", "getFindRingState") { miLinkFindRingState() }
         hookBluetoothDeviceResult("com.miui.headset.runtime.AncBatteryController", "getMiAudioEffect") { miLinkSpatialMode() }
@@ -235,8 +236,8 @@ object MiLinkServiceHook : HookContext() {
         hookDeviceSpatialTypeModel()
         hookSpatialCallbacks()
         hookProfileAudioEffectState()
-        hookHeadsetInfoNoArg("getDeviceId") { FAKE_DEVICE_ID }
-        hookHeadsetInfoNoArg("component3") { FAKE_DEVICE_ID }
+        hookHeadsetInfoNoArg("getDeviceId") { fakeDeviceId }
+        hookHeadsetInfoNoArg("component3") { fakeDeviceId }
         hookHeadsetInfoNoArg("getPowers", reconnectOnRead = true) { miLinkBatteryLevels() }
         hookHeadsetInfoNoArg("component4", reconnectOnRead = true) { miLinkBatteryLevels() }
         hookHeadsetInfoNoArg("getMode") { miLinkAncState() }
@@ -1078,7 +1079,7 @@ object MiLinkServiceHook : HookContext() {
 
     private fun isTargetCirculateServiceInfo(info: Any): Boolean {
         val values = readStringMembers(info, listOf("deviceId", "mac", "address", "headsetId"))
-        return values.any(::isKnownPodAddress) || values.any { it == FAKE_DEVICE_ID }
+        return values.any(::isKnownPodAddress) || values.any { it == fakeDeviceId }
     }
 
     private fun readStringMembers(target: Any?, names: List<String>): List<String> {
@@ -1097,8 +1098,8 @@ object MiLinkServiceHook : HookContext() {
             hookAfter(findMethod("com.miui.circulate.api.service.CirculateServiceInfo", "setHeadsetId", String::class.java, Int::class.javaPrimitiveType!!)) {
                 val headsetId = args[0] as? String ?: return@hookAfter
                 val address = runCatching { getObjectField(instance, "deviceId") as? String }.getOrNull()
-                if (address != null && !isKnownPodAddress(address) && headsetId != FAKE_DEVICE_ID) return@hookAfter
-                if (address == null && headsetId != FAKE_DEVICE_ID) return@hookAfter
+                if (address != null && !isKnownPodAddress(address) && headsetId != fakeDeviceId) return@hookAfter
+                if (address == null && headsetId != fakeDeviceId) return@hookAfter
                 lastCirculateServiceInfo = WeakReference(instance)
                 lastCirculateHeadsetId = headsetId
                 lastCirculateHeadsetType = args[1] as? Int ?: lastCirculateHeadsetType

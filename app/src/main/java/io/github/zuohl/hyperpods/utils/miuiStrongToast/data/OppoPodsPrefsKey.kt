@@ -16,6 +16,13 @@ object OppoPodsPrefsKey {
     /** 手动指定型号时的白名单 productId。 */
     const val SELECTED_MODEL_ID = "selected_model_id"
 
+    /** 伪装设备型号（决定系统详情页/图标显示的型号）。空 = 使用默认。 */
+    const val DISGUISE_DEVICE_ID = "disguise_device_id"
+    /** 伪装设备支持字符串；空 = 用 [DEFAULT_DISGUISE_SUPPORT]。 */
+    const val DISGUISE_SUPPORT = "disguise_support"
+    const val DEFAULT_DISGUISE_DEVICE_ID = "01011604"
+    const val DEFAULT_DISGUISE_SUPPORT = "01011604,111111001111000110101000"
+
     const val DEFAULT_SHOW_CONNECTION_BATTERY_ISLAND = true
     const val DEFAULT_SHOW_CONNECTION_POPUP = false
     const val DEFAULT_CONNECTION_POPUP_DISMISS_SECONDS = 8

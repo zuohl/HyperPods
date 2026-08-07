@@ -55,7 +55,8 @@ fun PodDetailPage(
     smartAncLevel: Int = -1,
     onNoiseLevelChange: (Int) -> Unit = {},
     homeImageFile: java.io.File? = null,
-    onOpenMoreSettings: () -> Unit = {}
+    onOpenMoreSettings: () -> Unit = {},
+    onOpenSystemSettings: (() -> Unit)? = null
 ) {
     val smartLevelName = if (noiseLevel == NoiseLevel.SMART) {
         when (smartAncLevel) {
@@ -194,6 +195,20 @@ fun PodDetailPage(
                         summary = stringResource(R.string.spatial_sound_summary),
                         checked = spatialSound,
                         onCheckedChange = onSpatialSoundChange
+                    )
+                }
+            }
+        }
+
+        if (onOpenSystemSettings != null) {
+            item {
+                Card(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                ) {
+                    ArrowPreference(
+                        title = stringResource(R.string.open_system_headset_settings),
+                        summary = stringResource(R.string.open_system_headset_settings_summary),
+                        onClick = onOpenSystemSettings
                     )
                 }
             }

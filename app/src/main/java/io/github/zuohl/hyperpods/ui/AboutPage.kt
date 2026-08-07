@@ -1,5 +1,6 @@
 package io.github.zuohl.hyperpods.ui
 
+import android.content.Context
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -66,6 +67,7 @@ import io.github.zuohl.hyperpods.pods.CustomButtonPosition
 import io.github.zuohl.hyperpods.pods.RfcommConnectionMethod
 import io.github.zuohl.hyperpods.ui.effect.BgEffectBackground
 import io.github.zuohl.hyperpods.ui.effect.ColorBlendToken
+import io.github.zuohl.hyperpods.config.FakeDeviceConfig
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey
 import kotlinx.coroutines.flow.onEach
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -79,6 +81,7 @@ import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -167,6 +170,51 @@ fun SettingsPage(
                     onCheckedChange = { onNotificationIslandStyleChange(it) },
                     enabled = showConnectionNotification.value
                 )
+            }
+        }
+
+        item {
+            val context = LocalContext.current
+            val prefs = remember(context) {
+                context.getSharedPreferences("oppopods_settings", Context.MODE_PRIVATE)
+            }
+            val knownIds = FakeDeviceConfig.KNOWN_MODEL_IDS
+            var disguiseId by remember {
+                mutableStateOf(
+                    prefs.getString(OppoPodsPrefsKey.DISGUISE_DEVICE_ID, null)
+                        ?: OppoPodsPrefsKey.DEFAULT_DISGUISE_DEVICE_ID
+                )
+            }
+            var isCustom by remember { mutableStateOf(disguiseId !in knownIds) }
+            val customLabel = stringResource(R.string.custom_option)
+            val options = knownIds + customLabel
+            val selectedIndex = if (isCustom) knownIds.size else knownIds.indexOf(disguiseId).coerceAtLeast(0)
+            fun saveDisguise(id: String) {
+                prefs.edit().putString(OppoPodsPrefsKey.DISGUISE_DEVICE_ID, id.trim()).apply()
+                disguiseId = id.trim()
+            }
+            Card(modifier = Modifier.padding(top = 12.dp)) {
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.disguise_model),
+                    summary = stringResource(R.string.disguise_model_summary),
+                    items = options,
+                    selectedIndex = selectedIndex,
+                    onSelectedIndexChange = { idx ->
+                        if (idx >= knownIds.size) {
+                            isCustom = true
+                        } else {
+                            isCustom = false
+                            saveDisguise(knownIds[idx])
+                        }
+                    }
+                )
+                if (isCustom) {
+                    TextField(
+                        value = disguiseId,
+                        onValueChange = { saveDisguise(it) },
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    )
+                }
             }
         }
 

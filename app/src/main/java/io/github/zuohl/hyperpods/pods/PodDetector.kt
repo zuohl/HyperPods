@@ -48,12 +48,19 @@ object PodDetector {
      * have a headset name but no [BluetoothDevice] (e.g. MiLink headset info).
      */
     fun isSupportedPodByName(name: String?): Boolean {
+        return brandByName(name) != null
+    }
+
+    /**
+     * Brand detection from a device name only (for UI that has no [BluetoothDevice]).
+     */
+    fun brandByName(name: String?): PodBrand? {
         val lower = name?.lowercase().orEmpty()
-        if (lower.isBlank()) return false
-        if (oppoNameKeywords.any { it in lower }) return true
-        if (qcyNameKeywords.any { it in lower }) return true
-        if (vivoNameKeywords.any { it in lower }) return true
-        return false
+        if (lower.isBlank()) return null
+        if (oppoNameKeywords.any { it in lower }) return PodBrand.OPPO
+        if (qcyNameKeywords.any { it in lower }) return PodBrand.QCY
+        if (vivoNameKeywords.any { it in lower }) return PodBrand.VIVO
+        return null
     }
 
     @SuppressLint("MissingPermission")

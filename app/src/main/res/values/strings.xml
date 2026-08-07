@@ -156,4 +156,17 @@
     <string name="debug_log_send">Send</string>
     <string name="debug_log_recv">Receive</string>
     <string name="debug_no_log">No logs yet</string>
+    <string name="disguise_model">Disguised device model</string>
+    <string name="disguise_model_summary">Model ID shown in system detail page / icon (blank = default)</string>
+    <string name="custom_option">Custom</string>
+    <string name="dual_device_connection">Dual-device connection</string>
+    <string name="ldac">LDAC</string>
+    <string name="ldac_summary">High-quality codec; enabling may restart the earphones and disable dual-device connection</string>
+    <string name="dynamic_eq">Dynamic EQ</string>
+    <string name="sleep_mode">Sleep Mode</string>
+    <string name="sleep_mode_summary">Blocks touch controls until the earphones are returned to the case</string>
+    <string name="adaptive_volume">Adaptive Volume</string>
+    <string name="enabled">On</string>
+    <string name="open_system_headset_settings">Open system headset settings</string>
+    <string name="open_system_headset_settings_summary">Open the system Bluetooth detail page (ANC / LDAC)</string>
 </resources>

@@ -14,6 +14,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.util.Log
+import io.github.zuohl.hyperpods.config.FakeDeviceConfig
 import io.github.zuohl.hyperpods.pods.PodController
 import io.github.zuohl.hyperpods.pods.PodDetector
 import io.github.zuohl.hyperpods.pods.RfcommController
@@ -28,8 +29,8 @@ object HeadsetStateDispatcher : HookContext() {
     private val knownPodAddresses = linkedSetOf<String>()
     private val hookedBinderClasses = linkedSetOf<String>()
 
-    private val FAKE_DEVICE_ID = "01011604"
-    private val FAKE_SUPPORT = "$FAKE_DEVICE_ID,111111001111000110101000"
+    private val fakeDeviceId: String get() = FakeDeviceConfig.deviceId(prefs)
+    private val fakeSupport: String get() = FakeDeviceConfig.support(prefs)
 
     override fun onHook() {
         hookHeadsetServiceBinder()
@@ -199,12 +200,12 @@ object HeadsetStateDispatcher : HookContext() {
             hookBefore(findMethod(className, "checkSupport", BluetoothDevice::class.java)) {
                 val device = args[0] as? BluetoothDevice
                 if (!isSupportedPod(device)) return@hookBefore
-                result = FAKE_SUPPORT
-                Log.d("HyperPods", "checkSupport forced device=${device?.address} support=$FAKE_SUPPORT")
+                result = fakeSupport
+                Log.d("HyperPods", "checkSupport forced device=${device?.address} support=$fakeSupport")
             }
         }.onFailure { Log.w("HyperPods", "hook checkSupport skipped", it) }
 
-        hookAddressStringResult(className, listOf("getDeviceInfo"), "getDeviceInfo") { FAKE_SUPPORT }
+        hookAddressStringResult(className, listOf("getDeviceInfo"), "getDeviceInfo") { fakeSupport }
         hookAddressStringResult(className, listOf("isSupportAudioSwitch", "mo19775z1", "z1"), "isSupportAudioSwitch") { "1" }
         hookAddressBooleanResult(className, listOf("isMiTWS", "mo19771O0", "O0"), "isMiTWS", true)
         hookAddressBooleanResult(className, listOf("checkIsMiTWS", "mo19766B", "B"), "checkIsMiTWS", true)
