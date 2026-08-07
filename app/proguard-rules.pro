@@ -8,16 +8,16 @@
 -allowaccessmodification
 -overloadaggressively
 -renamesourcefileattribute SourceFile
+-keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations,InnerClasses,EnclosingMethod,Signature
 
-# Strip Compose tooling/preview infrastructure from release builds.
--assumenosideeffects class androidx.compose.ui.tooling.* { *; }
--assumenosideeffects class androidx.compose.ui.preview.* { *; }
-
-# Keep Xposed entry point
+# Keep libxposed entry point. The class name is loaded from META-INF/xposed/java_init.list.
 -keep class io.github.zuohl.hyperpods.hook.HookEntry { *; }
 
-# Keep all hooker classes (referenced by name in Xposed framework)
+# Hook classes run inside host processes and are reached from HookEntry at runtime.
 -keep class io.github.zuohl.hyperpods.hook.** { *; }
 
-# Keep Parcelable data classes (used in broadcast extras)
+# Parcelable/data classes are shared through broadcast extras across processes.
 -keep class io.github.zuohl.hyperpods.utils.miuiStrongToast.data.** { *; }
+
+# ConnectedDevice is sent via putParcelableArrayListExtra in broadcasts.
+-keep class io.github.zuohl.hyperpods.pods.ConnectedDevice { *; }

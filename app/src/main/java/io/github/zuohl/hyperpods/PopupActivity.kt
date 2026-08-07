@@ -1,7 +1,5 @@
 package io.github.zuohl.hyperpods
 
-import android.annotation.SuppressLint
-import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,9 +16,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,120 +28,54 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import io.github.zuohl.hyperpods.pods.DeviceProfile
+import io.github.zuohl.hyperpods.pods.DeviceProfileStore
 import io.github.zuohl.hyperpods.pods.NoiseControlMode
-import io.github.zuohl.hyperpods.pods.detectDeviceCapabilities
-import io.github.zuohl.hyperpods.config.ConfigManager
-import io.github.zuohl.hyperpods.ui.AppLocale
 import io.github.zuohl.hyperpods.ui.AppTheme
 import io.github.zuohl.hyperpods.ui.components.AncSwitch
 import io.github.zuohl.hyperpods.ui.components.PodStatus
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
-import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodAction
+import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
+import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.batteryStatusCompat
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 class PopupActivity : ComponentActivity() {
-    override fun attachBaseContext(newBase: Context) {
-        AppLocale.rememberDeviceLocale(newBase)
-        AppLocale.apply(newBase, newBase.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE).getInt("app_language", AppLocale.SYSTEM))
-        super.attachBaseContext(newBase)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val prefs = getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
-        val appConfig = ConfigManager.refreshFromPrefs(prefs)
-        val bluetoothDevice = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
-        if (appConfig.notificationClickAction != ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP) {
-            openNotificationTarget(appConfig.notificationClickAction, bluetoothDevice)
-            finish()
-            return
-        }
-
         setContent {
+            val prefs = getSharedPreferences("oppopods_settings", Context.MODE_PRIVATE)
             val colorSchemeMode = when (prefs.getInt("theme_mode", 0)) {
                 1 -> ColorSchemeMode.Light
                 2 -> ColorSchemeMode.Dark
                 else -> ColorSchemeMode.System
             }
-            AppTheme(colorSchemeMode = colorSchemeMode, accentMode = prefs.getInt("accent_mode", 0)) {
+            AppTheme(colorSchemeMode = colorSchemeMode) {
                 PopupContent(
                     onMore = {
-                        val latestConfig = ConfigManager.refreshFromPrefs(prefs)
-                        openMoreTarget(latestConfig.moreClickAction, bluetoothDevice)
+                        val prefs = getSharedPreferences("oppopods_settings", Context.MODE_PRIVATE)
+                        if (prefs.getBoolean("open_heytap", false)) {
+                            val intent = packageManager.getLaunchIntentForPackage("com.heytap.headset")
+                            if (intent != null) {
+                                startActivity(intent)
+                            } else {
+                                startActivity(Intent(this@PopupActivity, MainActivity::class.java))
+                            }
+                        } else {
+                            startActivity(Intent(this@PopupActivity, MainActivity::class.java))
+                        }
                         finish()
                     },
                     onDone = { finish() }
                 )
             }
-        }
-    }
-
-    private fun openNotificationTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
-        when (action) {
-            ConfigManager.NOTIFICATION_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
-            ConfigManager.NOTIFICATION_CLICK_HEYTAP -> openHeyTapOrModule()
-            else -> openModule()
-        }
-    }
-
-    private fun openMoreTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
-        when (action) {
-            ConfigManager.MORE_CLICK_HEYTAP -> openHeyTapOrModule()
-            ConfigManager.MORE_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
-            else -> openModule()
-        }
-    }
-
-    private fun openModule() {
-        startActivity(Intent(this, MainActivity::class.java))
-    }
-
-    private fun openHeyTapOrModule() {
-        val intent = packageManager.getLaunchIntentForPackage("com.heytap.headset")
-        if (intent != null) {
-            startActivity(intent)
-        } else {
-            openModule()
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun openSystemSettings(bluetoothDevice: BluetoothDevice?) {
-        if (bluetoothDevice == null) {
-            openModule()
-            return
-        }
-        val intent = Intent().apply {
-            setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-            putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
-            putExtra("bluetoothaddress", bluetoothDevice.address)
-            putExtra("MIUI_HEADSET_SUPPORT", ConfigManager.fakeSupport())
-            putExtra("COME_FROM", "MIUI_BLUETOOTH_SETTINGS")
-            putExtra("DEVICE_ID", ConfigManager.fakeDeviceId())
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { startActivity(intent) }.onFailure { openModule() }
-    }
-
-    private fun Intent.parcelableDevice(key: String): BluetoothDevice? {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            getParcelableExtra(key, BluetoothDevice::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            getParcelableExtra(key)
         }
     }
 }
@@ -154,8 +85,14 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
     val showDialog = remember { mutableStateOf(false) }
 
-    val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
+    val prefs = remember { context.getSharedPreferences("oppopods_settings", Context.MODE_PRIVATE) }
     val themeMode = remember { prefs.getInt("theme_mode", 0) }
+    val activeProfile = remember {
+        mutableStateOf(
+            runCatching { DeviceProfileStore.resolveProfile(context, prefs) }
+                .getOrElse { DeviceProfile("popup_fallback", "Unknown") }
+        )
+    }
     val systemDark = isSystemInDarkTheme()
     val isDarkMode = when (themeMode) {
         1 -> false
@@ -166,50 +103,43 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
     val batteryParams = remember { mutableStateOf(BatteryParams()) }
     val ancMode = remember { mutableStateOf(NoiseControlMode.OFF) }
     val gameMode = remember { mutableStateOf(false) }
-    val transparencyVocalEnhancement = remember { mutableStateOf(false) }
     val deviceName = remember { mutableStateOf("") }
-    val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
-    val capabilities = detectDeviceCapabilities(
-        deviceName = deviceName.value,
-        adaptiveOverride = appConfig.adaptiveCapabilityOverride,
-        spatialAudioOverride = appConfig.spatialAudioCapabilityOverride,
-        spatialSoundSwitchOverride = appConfig.spatialSoundSwitchCapabilityOverride,
-    )
 
     val broadcastReceiver = remember {
         object : BroadcastReceiver() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 when (p1?.action) {
-                    PodAction.ACTION_PODS_ANC_CHANGED -> {
+                    OppoPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         val status = p1.getIntExtra("status", 1)
                         ancMode.value = when (status) {
                             1 -> NoiseControlMode.OFF
                             2 -> NoiseControlMode.NOISE_CANCELLATION
                             3 -> NoiseControlMode.TRANSPARENCY
                             4 -> NoiseControlMode.ADAPTIVE
-                            5 -> NoiseControlMode.NOISE_CANCELLATION_SMART
-                            6 -> NoiseControlMode.NOISE_CANCELLATION_LIGHT
-                            7 -> NoiseControlMode.NOISE_CANCELLATION_MEDIUM
-                            8 -> NoiseControlMode.NOISE_CANCELLATION_DEEP
                             else -> NoiseControlMode.OFF
                         }
                     }
-                    PodAction.ACTION_PODS_BATTERY_CHANGED -> {
-                        batteryParams.value =
-                            p1.getParcelableExtra("status", BatteryParams::class.java)!!
+
+                    OppoPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
+                        p1.batteryStatusCompat()?.let {
+                            batteryParams.value = it
+                        }
                     }
-                    PodAction.ACTION_PODS_CONNECTED -> {
-                        deviceName.value = p1.getStringExtra("device_name") ?: ""
+                    OppoPodsAction.ACTION_PODS_CONNECTED -> {
+                        val name = p1.getStringExtra("device_name") ?: ""
+                        deviceName.value = name
+                        if (name.isNotBlank()) {
+                            runCatching {
+                                DeviceProfileStore.resolveProfile(context, prefs, name)
+                            }.onSuccess { activeProfile.value = it }
+                        }
                         if (!showDialog.value) showDialog.value = true
                     }
-                    PodAction.ACTION_PODS_DISCONNECTED -> {
+                    OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
                         showDialog.value = false
                     }
-                    PodAction.ACTION_PODS_GAME_MODE_CHANGED -> {
+                    OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED -> {
                         gameMode.value = p1.getBooleanExtra("enabled", false)
-                    }
-                    PodAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED -> {
-                        transparencyVocalEnhancement.value = p1.getBooleanExtra("enabled", false)
                     }
                 }
             }
@@ -218,21 +148,19 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
 
     DisposableEffect(Unit) {
         context.registerReceiver(broadcastReceiver, IntentFilter().apply {
-            addAction(PodAction.ACTION_PODS_ANC_CHANGED)
-            addAction(PodAction.ACTION_PODS_BATTERY_CHANGED)
-            addAction(PodAction.ACTION_PODS_CONNECTED)
-            addAction(PodAction.ACTION_PODS_DISCONNECTED)
-            addAction(PodAction.ACTION_PODS_GAME_MODE_CHANGED)
-            addAction(PodAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED)
+            addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
+            addAction(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED)
+            addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
+            addAction(OppoPodsAction.ACTION_PODS_DISCONNECTED)
+            addAction(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED)
         }, Context.RECEIVER_EXPORTED)
 
-        context.sendBroadcast(Intent(PodAction.ACTION_PODS_UI_INIT).apply {
+        context.sendBroadcast(Intent(OppoPodsAction.ACTION_PODS_UI_INIT).apply {
             setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         })
-        context.sendBroadcast(Intent(PodAction.ACTION_REFRESH_STATUS).apply {
+        context.sendBroadcast(Intent(OppoPodsAction.ACTION_REFRESH_STATUS).apply {
             setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            putExtra(OppoPodsAction.EXTRA_ALLOW_RFCOMM_RECONNECT, true)
         })
 
         onDispose {
@@ -248,9 +176,9 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
 
         while (true) {
             delay(15_000)
-            context.sendBroadcast(Intent(PodAction.ACTION_REFRESH_STATUS).apply {
+            context.sendBroadcast(Intent(OppoPodsAction.ACTION_REFRESH_STATUS).apply {
                 setPackage("com.android.bluetooth")
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                putExtra(OppoPodsAction.EXTRA_ALLOW_RFCOMM_RECONNECT, true)
             })
         }
     }
@@ -262,35 +190,19 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
             NoiseControlMode.NOISE_CANCELLATION -> 2
             NoiseControlMode.TRANSPARENCY -> 3
             NoiseControlMode.ADAPTIVE -> 4
-            NoiseControlMode.NOISE_CANCELLATION_SMART -> 5
-            NoiseControlMode.NOISE_CANCELLATION_LIGHT -> 6
-            NoiseControlMode.NOISE_CANCELLATION_MEDIUM -> 7
-            NoiseControlMode.NOISE_CANCELLATION_DEEP -> 8
         }
-        Intent(PodAction.ACTION_ANC_SELECT).apply {
+        Intent(OppoPodsAction.ACTION_ANC_SELECT).apply {
             putExtra("status", status)
             setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             context.sendBroadcast(this)
         }
     }
 
     fun setGameMode(enabled: Boolean) {
         gameMode.value = enabled
-        Intent(PodAction.ACTION_GAME_MODE_SET).apply {
+        Intent(OppoPodsAction.ACTION_GAME_MODE_SET).apply {
             putExtra("enabled", enabled)
             setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
-    }
-
-    fun setTransparencyVocalEnhancement(enabled: Boolean) {
-        transparencyVocalEnhancement.value = enabled
-        Intent(PodAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET).apply {
-            putExtra("enabled", enabled)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             context.sendBroadcast(this)
         }
     }
@@ -315,26 +227,24 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                     batteryParams = batteryParams.value,
                     ancMode = ancMode.value,
                     gameMode = gameMode.value,
-                    transparencyVocalEnhancement = transparencyVocalEnhancement.value,
                     onAncModeChange = ::setAncMode,
                     onGameModeChange = ::setGameMode,
-                    onTransparencyVocalEnhancementChange = ::setTransparencyVocalEnhancement,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
-                    adaptiveModeEnabled = capabilities.adaptiveSupported
+                    adaptiveModeEnabled = activeProfile.value.adaptiveVisible,
+                    gameModeVisible = activeProfile.value.gameModeVisible
                 )
             } else {
                 PortraitPopupBody(
                     batteryParams = batteryParams.value,
                     ancMode = ancMode.value,
                     gameMode = gameMode.value,
-                    transparencyVocalEnhancement = transparencyVocalEnhancement.value,
                     onAncModeChange = ::setAncMode,
                     onGameModeChange = ::setGameMode,
-                    onTransparencyVocalEnhancementChange = ::setTransparencyVocalEnhancement,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
-                    adaptiveModeEnabled = capabilities.adaptiveSupported
+                    adaptiveModeEnabled = activeProfile.value.adaptiveVisible,
+                    gameModeVisible = activeProfile.value.gameModeVisible
                 )
             }
         }
@@ -346,13 +256,12 @@ private fun PortraitPopupBody(
     batteryParams: BatteryParams,
     ancMode: NoiseControlMode,
     gameMode: Boolean,
-    transparencyVocalEnhancement: Boolean,
     onAncModeChange: (NoiseControlMode) -> Unit,
     onGameModeChange: (Boolean) -> Unit,
-    onTransparencyVocalEnhancementChange: (Boolean) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
-    adaptiveModeEnabled: Boolean = true
+    adaptiveModeEnabled: Boolean = true,
+    gameModeVisible: Boolean = true
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -363,22 +272,18 @@ private fun PortraitPopupBody(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
-            AncSwitch(
-                ancStatus = ancMode,
-                onAncModeChange = onAncModeChange,
-                adaptiveModeEnabled = adaptiveModeEnabled,
-                transparencyVocalEnhancement = transparencyVocalEnhancement,
-                onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange
-            )
+            AncSwitch(ancMode, onAncModeChange = onAncModeChange, adaptiveModeEnabled = adaptiveModeEnabled)
         }
         Spacer(modifier = Modifier.height(12.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
-            SwitchPreference(
-                title = stringResource(R.string.game_mode),
-                summary = stringResource(R.string.game_mode_summary),
-                checked = gameMode,
-                onCheckedChange = onGameModeChange
-            )
+            if (gameModeVisible) {
+                SwitchPreference(
+                    title = stringResource(R.string.game_mode),
+                    summary = stringResource(R.string.game_mode_summary),
+                    checked = gameMode,
+                    onCheckedChange = onGameModeChange
+                )
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Row(
@@ -404,27 +309,18 @@ private fun LandscapePopupBody(
     batteryParams: BatteryParams,
     ancMode: NoiseControlMode,
     gameMode: Boolean,
-    transparencyVocalEnhancement: Boolean,
     onAncModeChange: (NoiseControlMode) -> Unit,
     onGameModeChange: (Boolean) -> Unit,
-    onTransparencyVocalEnhancementChange: (Boolean) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
-    adaptiveModeEnabled: Boolean = true
+    adaptiveModeEnabled: Boolean = true,
+    gameModeVisible: Boolean = true
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(min = 560.dp)
-            .height(240.dp),
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .weight(0.60f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.Center
-        ) {
+        Column(modifier = Modifier.weight(0.60f)) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 PodStatus(
                     batteryParams,
@@ -438,51 +334,32 @@ private fun LandscapePopupBody(
                     ancMode,
                     onAncModeChange = onAncModeChange,
                     compact = true,
-                    adaptiveModeEnabled = adaptiveModeEnabled,
-                    transparencyVocalEnhancement = transparencyVocalEnhancement,
-                    onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange
+                    adaptiveModeEnabled = adaptiveModeEnabled
                 )
             }
         }
         Column(
-            modifier = Modifier
-                .weight(0.40f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.weight(0.40f).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            val gameModeCardColor = if (gameMode) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surfaceContainer
-            val gameModeTextColor = if (gameMode) Color.White else MiuixTheme.colorScheme.onSurfaceContainer
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.defaultColors(
-                    color = gameModeCardColor,
-                    contentColor = gameModeTextColor
-                ),
-                pressFeedbackType = PressFeedbackType.Sink,
-                showIndication = true,
-                onClick = { onGameModeChange(!gameMode) },
-                onLongPress = {}
-            ) {
-                Text(
-                    text = stringResource(R.string.game_mode),
-                    color = if (gameMode) Color.White else MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    textAlign = TextAlign.Center
+            if (gameModeVisible) {
+                TextButton(
+                    text = stringResource(
+                        if (gameMode) R.string.disable_game_mode else R.string.enable_game_mode
+                    ),
+                    onClick = { onGameModeChange(!gameMode) },
+                    modifier = Modifier.fillMaxWidth().weight(1f)
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
             TextButton(
                 text = stringResource(R.string.more),
                 onClick = onMore,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().weight(1f)
             )
-            Spacer(modifier = Modifier.height(6.dp))
             TextButton(
                 text = stringResource(R.string.done),
                 onClick = onDone,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
     }

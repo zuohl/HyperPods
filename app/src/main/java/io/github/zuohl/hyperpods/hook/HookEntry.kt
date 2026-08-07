@@ -1,50 +1,67 @@
 package io.github.zuohl.hyperpods.hook
 
-import android.content.SharedPreferences
 import android.os.Build
 import androidx.annotation.RequiresApi
+import android.util.Log
+import io.github.libxposed.api.XposedInterface.HookHandle
 import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
-import io.github.zuohl.hyperpods.config.ConfigManager
-import io.github.zuohl.hyperpods.hook.milink.MiLinkServiceHook
 
 class HookEntry : XposedModule() {
-    private val TAG = "HyperPods-HookEntry"
-    private val configListeners = mutableListOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+    private var activeHook: HookContext? = null
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun onPackageLoaded(param: PackageLoadedParam) {
         if (!param.isFirstPackage) return
 
-        when (param.packageName) {
-            "com.android.bluetooth" -> {
-                loadHook(HeadsetStateDispatcher, param.defaultClassLoader, param.packageName)
-                loadHook(BluetoothUpstreamHeadsetHook(), param.defaultClassLoader, param.packageName)
-            }
-            "com.android.settings" -> loadHook(SettingsHeadsetHook, param.defaultClassLoader, param.packageName)
-            "com.milink.service" -> loadHook(MiLinkServiceHook, param.defaultClassLoader, param.packageName)
-            "com.xiaomi.bluetooth" -> {
-                loadHook(MiBluetoothToastHook, param.defaultClassLoader, param.packageName)
-                loadHook(BluetoothUpstreamHeadsetHook(), param.defaultClassLoader, param.packageName)
-            }
-        }
+        loadHookForPackage(param.packageName, param.defaultClassLoader)
     }
 
-    private fun loadHook(hook: HookContext, classLoader: ClassLoader, packageName: String) {
-        Log.module = this
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        activeHook?.onHotReloading()
+        detach()
+        return true
+    }
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        val oldHooks = param.oldHookHandles
+        val classLoader = oldHooks.firstOrNull()?.executable?.declaringClass?.classLoader
+        if (classLoader == null) {
+            Log.w(TAG, "Hot reload skipped: no target class loader is available")
+            return
+        }
+        // HotReloadedParam exposes the process name (for example com.milink.service:ui),
+        // whereas hook selection is keyed by the owning package. Without this normalization a
+        // module update silently drops every hook in secondary processes.
+        val packageName = param.processName.substringBefore(':')
+        Log.d(TAG, "Hot reload package=$packageName process=${param.processName}")
+        loadHookForPackage(packageName, classLoader)
+        val activeIds = activeHook?.hookIds().orEmpty()
+        oldHooks.filter { it.id !in activeIds }.forEach(HookHandle::unhook)
+    }
+
+    private fun loadHookForPackage(packageName: String, classLoader: ClassLoader) {
+        val hook = when (packageName) {
+            "com.android.bluetooth" -> HeadsetStateDispatcher
+            "com.milink.service" -> MiLinkServiceHook
+            "com.xiaomi.bluetooth" -> MiBluetoothToastHook
+            "com.android.settings" -> SettingsHeadsetHook
+            else -> return
+        }
+        loadHook(hook, classLoader)
+    }
+
+    private fun loadHook(hook: HookContext, classLoader: ClassLoader) {
         hook.module = this
         hook.appClassLoader = classLoader
-        hook.packageName = packageName
-        hook.prefs = getRemotePreferences("hyperpods_settings")
-        Log.d(TAG, "loadHook package=$packageName hook=${hook.javaClass.simpleName}")
-        ConfigManager.init(hook.prefs)
-        val configListener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
-            if (key == ConfigManager.PREF_KEY_CONFIG_JSON) {
-                ConfigManager.refreshFromPrefs(sharedPreferences)
-            }
-        }
-        configListeners.add(configListener)
-        hook.prefs.registerOnSharedPreferenceChangeListener(configListener)
+        hook.prefs = getRemotePreferences("oppopods_settings")
         hook.onHook()
+        activeHook = hook
+    }
+
+    private companion object {
+        const val TAG = "OppoPods-HookEntry"
     }
 }

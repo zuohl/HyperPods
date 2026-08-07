@@ -6,57 +6,50 @@
 
     <queries>
         <package android:name="com.heytap.headset" />
-        <package android:name="com.android.settings" />
     </queries>
 
     <application
-        android:name=".HyperPodsApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:extractNativeLibs="false"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
-        android:theme="@style/Theme.HyperPods">
-
-        <activity-alias
-            android:name=".LauncherActivity"
-            android:enabled="true"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_round"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
+        android:theme="@style/Theme.OppoPods">
 
         <activity android:name=".MainActivity"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         <activity android:name=".PopupActivity"
-            android:theme="@style/Theme.HyperPods.Popup"
+            android:theme="@style/Theme.OppoPods.Popup"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="io.github.zuohl.hyperpods.action.show_pods_ui" />
+                <action android:name="chen.action.oppopods.show_pods_ui" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <activity android:name=".ConnectionPopupActivity"
+            android:theme="@style/Theme.OppoPods.Popup"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="true" />
+        <!-- 跨进程供图：被 hook 的系统进程读取当前配置档的岛图/通知图 -->
         <provider
-            android:name=".config.PodImageProvider"
-            android:authorities="io.github.zuohl.hyperpods.podimages"
-            android:exported="true"
-            android:grantUriPermissions="false" />
+            android:name=".pods.PodImageProvider"
+            android:authorities="io.github.zuohl.hyperpods.assets"
+            android:exported="true" />
+
         <!-- Set as Xposed Module -->
         <meta-data
             android:name="xposedmodule"
@@ -65,7 +58,7 @@
         <!-- Set your Xposed Module description -->
         <meta-data
             android:name="xposeddescription"
-            android:value="Third-party earphones support (QCY/vivo) for Xiaomi HyperOS." />
+            android:value="OPPO Earphones Support for Xiaomi HyperOS." />
 
         <!-- The minimum Xposed version number -->
         <meta-data

@@ -33,17 +33,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.zuohl.hyperpods.R
-import io.github.zuohl.hyperpods.pods.WearState
-import io.github.zuohl.hyperpods.pods.WearStatus
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams
-import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 
 @Composable
 fun PodStatus(
     batteryParams: BatteryParams,
-    wearStatus: WearStatus = WearStatus(),
     modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
@@ -57,7 +53,6 @@ fun PodStatus(
         BatteryColumn(
             label = stringResource(R.string.batt_left_pod),
             pod = batteryParams.left,
-            wearState = wearStatus.left,
             modifier = Modifier.weight(1f),
             compact = compact
         )
@@ -70,7 +65,6 @@ fun PodStatus(
         BatteryColumn(
             label = stringResource(R.string.batt_right_pod),
             pod = batteryParams.right,
-            wearState = wearStatus.right,
             modifier = Modifier.weight(1f),
             compact = compact
         )
@@ -83,7 +77,6 @@ fun PodStatus(
         BatteryColumn(
             label = stringResource(R.string.pod_case),
             pod = batteryParams.case,
-            wearState = wearStatus.case,
             modifier = Modifier.weight(1f),
             compact = compact
         )
@@ -91,13 +84,7 @@ fun PodStatus(
 }
 
 @Composable
-private fun BatteryColumn(
-    label: String,
-    pod: PodParams?,
-    wearState: WearState?,
-    modifier: Modifier = Modifier,
-    compact: Boolean = false
-) {
+private fun BatteryColumn(label: String, pod: PodParams?, modifier: Modifier = Modifier, compact: Boolean = false) {
     val isConnected = pod != null && pod.isConnected
     val level = pod?.battery ?: 0
 
@@ -120,17 +107,11 @@ private fun BatteryColumn(
             horizontalAlignment = Alignment.Start,
             modifier = Modifier.padding(vertical = if (compact) 2.dp else 4.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = paddedLabel,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                WearStatusIcon(
-                    wearState = wearState,
-                    modifier = Modifier.padding(start = 2.dp)
-                )
-            }
+            Text(
+                text = paddedLabel,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = displayLevel,
@@ -145,25 +126,6 @@ private fun BatteryColumn(
                 modifier = Modifier.size(24.dp)
             )
         }
-    }
-}
-
-@Composable
-private fun WearStatusIcon(wearState: WearState?, modifier: Modifier = Modifier) {
-    val imageVector = when (wearState) {
-        WearState.WEARING -> AppIcons.Contacts
-        WearState.REMOVED -> AppIcons.RemoveContact
-        else -> null
-    }
-
-    Box(modifier = modifier.size(18.dp), contentAlignment = Alignment.Center) {
-        if (imageVector == null) return@Box
-        Icon(
-            imageVector = imageVector,
-            contentDescription = wearState?.name,
-            modifier = Modifier.size(14.dp),
-            tint = Color.Gray
-        )
     }
 }
 
@@ -218,15 +180,19 @@ private fun getBatteryIconRes(level: Int, isCharging: Boolean): Int {
 private fun themedPainterResource(@androidx.annotation.DrawableRes id: Int): Painter {
     val context = LocalContext.current
     val themeConfig = LocalConfiguration.current
-    val sysNightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+    val sysNightMode = if (isSystemInDarkTheme()) {
+        Configuration.UI_MODE_NIGHT_YES
+    } else {
+        Configuration.UI_MODE_NIGHT_NO
+    }
     val themeNightMode = themeConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
     return if (sysNightMode == themeNightMode) {
         painterResource(id)
     } else {
-        val themedResources = remember(context, themeNightMode) {
+        val themedResources = remember(context, themeConfig, themeNightMode) {
             context.createConfigurationContext(
-                Configuration(context.resources.configuration).apply {
+                Configuration(themeConfig).apply {
                     uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or themeNightMode
                 }
             ).resources

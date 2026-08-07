@@ -10,14 +10,16 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import kotlinx.serialization.json.Json
 import io.github.zuohl.hyperpods.BuildConfig
-import io.github.zuohl.hyperpods.hook.Log
 import io.github.zuohl.hyperpods.utils.SystemApisUtils.isHyperOS
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.IconParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.Left
+import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings
+import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.Right
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.StringToastBean
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.TextParams
@@ -51,7 +53,7 @@ object MiuiStrongToastUtil {
                 "setStatus", Int::class.javaPrimitiveType, String::class.java, Bundle::class.java
             ).invoke(service, 1, "strong_toast_action", bundle)
         } catch (e: Exception) {
-            Log.e("HyperPods", "Failed to show HyperOS String Toast")
+            Log.e("OppoPods", "Failed to show HyperOS String Toast")
         }
     }
 
@@ -95,18 +97,18 @@ object MiuiStrongToastUtil {
             ).invoke(service, 1, "strong_toast_action", bundle)
             lastPodsTimestamp = System.currentTimeMillis()
         } catch (_: Exception) {
-            Log.e("HyperPods", "Failed to show Pods Battery Toast")
+            Log.e("OppoPods", "Failed to show Pods Battery Toast")
         }
     }
 
     fun showPodsBatteryToastByMiuiBt(
         context: Context,
         batteryParams: BatteryParams,
-        device: BluetoothDevice? = null,
+        notificationSettings: NotificationSettings = NotificationSettings()
     ) {
-        val intent = Intent("io.github.zuohl.hyperpods.action.sendstrongtoast")
+        val intent = Intent("chen.action.oppopods.sendstrongtoast")
         intent.putExtra("batteryParams", batteryParams)
-        intent.putExtra("address", device?.address.orEmpty())
+        notificationSettings.putExtras(intent)
         intent.`package` = "com.xiaomi.bluetooth"
         context.sendBroadcast(intent)
     }
@@ -115,10 +117,14 @@ object MiuiStrongToastUtil {
         context: Context,
         batteryParams: BatteryParams,
         device: BluetoothDevice,
+        notificationSettings: NotificationSettings = NotificationSettings(),
+        rfcommConnected: Boolean = true
     ) {
-        val intent = Intent("io.github.zuohl.hyperpods.action.updatepodsnotification")
+        val intent = Intent("chen.action.oppopods.updatepodsnotification")
         intent.putExtra("batteryParams", batteryParams)
         intent.putExtra("device", device)
+        notificationSettings.putExtras(intent)
+        intent.putExtra(OppoPodsAction.EXTRA_RFCOMM_CONNECTED, rfcommConnected)
         intent.`package` = "com.xiaomi.bluetooth"
         context.sendBroadcast(intent)
     }
@@ -127,7 +133,7 @@ object MiuiStrongToastUtil {
         context: Context,
         device: BluetoothDevice,
     ) {
-        val intent = Intent("io.github.zuohl.hyperpods.action.cancelpodsnotification")
+        val intent = Intent("chen.action.oppopods.cancelpodsnotification")
         intent.putExtra("device", device)
         intent.`package` = "com.xiaomi.bluetooth"
         context.sendBroadcast(intent)

@@ -5,28 +5,31 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.xzakota.hyper.notification.focus.FocusNotification
-import io.github.zuohl.hyperpods.hook.Log
+import io.github.zuohl.hyperpods.R
+import io.github.zuohl.hyperpods.pods.PodImageSlot
+import io.github.zuohl.hyperpods.pods.PodImageStore
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 
-@SuppressLint("WrongConstant")
+@SuppressLint("WrongConstant", "MissingPermission", "NotificationPermission")
 object FocusIslandUtil {
-    private const val TAG = "HyperPods-FocusIsland"
-    private const val CHANNEL_ID = "hyperpods_focus_island"
-    private const val CHANNEL_NAME = "HyperPods Battery"
+    private const val TAG = "OppoPods-FocusIsland"
+    private const val CHANNEL_ID = "oppopods_focus_island"
+    private const val CHANNEL_NAME = "OppoPods Battery"
     private const val NOTIFICATION_ID = 10086
+    private const val MODULE_PACKAGE = "io.github.zuohl.hyperpods"
     private const val ISLAND_TIMEOUT_SECONDS = 3
     private const val DISMISS_DELAY_MS = 4000L
 
     fun showBatteryIsland(
         context: Context,
-        prefs: SharedPreferences,
-        batteryParams: BatteryParams,
-        address: String,
+        batteryParams: BatteryParams
     ): Boolean {
         try {
             val leftConnected = batteryParams.left?.isConnected == true
@@ -38,8 +41,18 @@ object FocusIslandUtil {
             val leftText = if (leftConnected) "${batteryParams.left!!.battery}" else "-"
             val rightText = if (rightConnected) "${batteryParams.right!!.battery}" else "-"
 
-            val leftBitmap = PodImageLoader.loadIslandLeftBitmap(context, prefs, address)
-            val rightBitmap = PodImageLoader.loadIslandRightBitmap(context, prefs, address)
+            // 从模块 APK 加载耳机图片为 Bitmap，避免跨包资源引用问题
+            val moduleContext = context.createPackageContext(
+                MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY
+            )
+            // 优先用用户自定义的岛图（经 ContentProvider 跨进程读取）；缺省回退模块内置资源。
+            // 内置资源按名字解析（而非编译期 R 常量），避免模块更新后资源 ID 移位取到错图。
+            val leftBitmap = loadCustomBitmap(context, PodImageSlot.ISLAND_LEFT)
+                ?: moduleContext.resources.getIdentifier("img_left", "drawable", MODULE_PACKAGE)
+                    .takeIf { it != 0 }?.let { BitmapFactory.decodeResource(moduleContext.resources, it) }
+            val rightBitmap = loadCustomBitmap(context, PodImageSlot.ISLAND_RIGHT)
+                ?: moduleContext.resources.getIdentifier("img_right", "drawable", MODULE_PACKAGE)
+                    .takeIf { it != 0 }?.let { BitmapFactory.decodeResource(moduleContext.resources, it) }
 
             if (leftBitmap == null || rightBitmap == null) {
                 Log.e(TAG, "Failed to decode earphone icon bitmaps")
@@ -69,7 +82,7 @@ object FocusIslandUtil {
                 val picRight = createPicture("key_pic_right", rightIcon)
 
                 enableFloat = true
-                ticker = "HyperPods"
+                ticker = "OppoPods"
                 tickerPic = picLeft
 
                 isShowNotification = false
@@ -100,7 +113,7 @@ object FocusIslandUtil {
                         }
                     }
                     shareData {
-                        title = "HyperPods"
+                        title = "OppoPods"
                         content = contentText
                         shareContent = contentText
                     }
@@ -109,9 +122,9 @@ object FocusIslandUtil {
 
             val notification = Notification.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("HyperPods")
+                .setContentTitle("OppoPods")
                 .setContentText(contentText)
-                .setTicker("HyperPods")
+                .setTicker("OppoPods")
                 .addExtras(extras)
                 .build()
 
@@ -127,5 +140,13 @@ object FocusIslandUtil {
             Log.e(TAG, "Failed to show Focus Island", e)
             return false
         }
+    }
+
+    /** 经 ContentProvider 读取用户自定义岛图（跨进程）；未设置则返回 null 由调用方回退内置资源。 */
+    private fun loadCustomBitmap(context: Context, slot: PodImageSlot): Bitmap? {
+        return runCatching {
+            context.contentResolver.openInputStream(PodImageStore.uri(slot))
+                ?.use { BitmapFactory.decodeStream(it) }
+        }.onFailure { Log.w(TAG, "loadCustomBitmap failed slot=${slot.key}", it) }.getOrNull()
     }
 }
