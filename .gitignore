@@ -21,3 +21,6 @@ opencode.json
 /.idea
 /.qoder
 /.codex-tools
+
+# Gradle daemon
+/gradle/gradle-daemon-jvm.properties

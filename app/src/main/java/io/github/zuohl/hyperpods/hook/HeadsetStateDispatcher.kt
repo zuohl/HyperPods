@@ -47,12 +47,14 @@ object HeadsetStateDispatcher : HookContext() {
                 registerBluetoothStateReceiver(context)
                 if (!isSupportedPod(device)) return@post
 
-                val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
+                // Derive icon state from the actually-connected profiles rather than
+                // blindly flipping it: a transient A2DP teardown (idle, call mode) or
+                // an already-connected-at-hook-install device should not hide the icon
+                // while the headset profile is still up.
+                updateHeadsetIcon(context)
                 if (currState == BluetoothHeadset.STATE_CONNECTED) {
-                    statusBarManager.setIconVisibility("wireless_headset", true)
                     PodController.connectPod(context, device, prefs)
                 } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
-                    statusBarManager.setIconVisibility("wireless_headset", false)
                     PodController.disconnectedPod(context, device)
                 }
             }
@@ -106,10 +108,10 @@ object HeadsetStateDispatcher : HookContext() {
                     BluetoothDevice.ACTION_ACL_DISCONNECTED,
                     BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED -> {
                         Log.d("HyperPods", "ACL disconnected device=${device.name}/${device.address}")
-                        runCatching {
-                            val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
-                            statusBarManager.setIconVisibility("wireless_headset", false)
-                        }
+                        // Don't hide the icon just because the ACL link dropped — a brief
+                        // sleep/out-of-range drop may leave the profiles (HFP/A2DP) connected.
+                        // Re-derive from the actually-connected profiles instead.
+                        updateHeadsetIcon(context)
                         PodController.disconnectedPod(context, device)
                     }
                     BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
@@ -118,10 +120,9 @@ object HeadsetStateDispatcher : HookContext() {
                         Log.d("HyperPods", "profile state changed action=${intent.action} state=$state device=${device.name}/${device.address} isSupportedPod=${isSupportedPod(device)}")
                         if (state == BluetoothProfile.STATE_DISCONNECTED || state == BluetoothProfile.STATE_DISCONNECTING) {
                             Log.d("HyperPods", "profile disconnected state=$state device=${device.name}/${device.address}")
-                            runCatching {
-                                val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
-                                statusBarManager.setIconVisibility("wireless_headset", false)
-                            }
+                            // Re-evaluate: another profile of the same pod (or another supported
+                            // pod) may still be connected, in which case the icon must persist.
+                            updateHeadsetIcon(context)
                             PodController.disconnectedPod(context, device)
                         }
                     }
@@ -134,10 +135,31 @@ object HeadsetStateDispatcher : HookContext() {
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
         }, Context.RECEIVER_EXPORTED)
         bluetoothStateReceiverRegistered = true
+        // Re-assert on registration so a pod that was already connected before the
+        // hook installed (BT toggle, process restart) still gets the icon.
+        updateHeadsetIcon(context)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun updateHeadsetIcon(context: Context?) {
+        if (context == null) return
+        val bluetoothManager = context.getSystemService(BluetoothManager::class.java) ?: return
+        val connected = buildList {
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+        }.distinctBy { it.address }.any { isSupportedPod(it) }
+        runCatching {
+            val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
+            statusBarManager.setIconVisibility("wireless_headset", connected)
+        }
+        Log.d("HyperPods", "updateHeadsetIcon connected=$connected")
     }
 
     @SuppressLint("MissingPermission")
     private fun ensureConnectedPod(context: Context) {
+        // Re-assert the status bar icon even when the pod is already managed, so the
+        // icon appears after process restarts / UI-init refreshes without a reconnect.
+        updateHeadsetIcon(context)
         val snapshot = runCatching { PodController.currentStatusSnapshot() }.getOrNull()
         if (snapshot?.connected == true || snapshot?.connecting == true) {
             Log.d("HyperPods", "ensureConnectedPod skipped snapshot connected=${snapshot.connected} connecting=${snapshot.connecting}")
