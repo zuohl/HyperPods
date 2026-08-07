@@ -99,6 +99,21 @@ object RfcommController {
     private var lastKnownCaseCharging: Boolean = false
     private var cachedDeviceName: String = ""
 
+    // ---- Pod interface support (read by OppoPod / hooks) ----
+    fun currentAncMode(): Int = currentAnc
+
+    fun isPodConnectedNow(): Boolean = isPodConnected
+
+    fun currentBatterySnapshotCompat(): BatteryParams? =
+        if (::currentBatteryParams.isInitialized) currentBatteryParams else null
+
+    fun currentDeviceAddress(): String? =
+        if (::mDevice.isInitialized) runCatching { mDevice.address }.getOrNull() else null
+
+    fun currentDeviceName(): String? =
+        if (::mDevice.isInitialized) runCatching { mDevice.name }.getOrNull()?.takeIf { it.isNotBlank() }
+        else null
+
     // Polling job
     private var batteryPollJob: kotlinx.coroutines.Job? = null
 

@@ -11,6 +11,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.util.Log
+import io.github.zuohl.hyperpods.pods.PodController
+import io.github.zuohl.hyperpods.pods.PodDetector
 import io.github.zuohl.hyperpods.pods.RfcommController
 import io.github.zuohl.hyperpods.utils.SystemApisUtils.setIconVisibility
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
@@ -30,18 +32,19 @@ object HeadsetStateDispatcher : HookContext() {
                 return@hookAfter
             }
             handler.post {
-                Log.d("OppoPods", "A2DP Connection State: $currState, isOppoPod ${isOppoPod(device)}")
+                val supported = device != null && PodController.supports(device)
+                Log.d("HyperPods", "A2DP Connection State: $currState, supported=$supported brand=${device?.let { PodDetector.detectBrand(it) }}")
                 val context = instance as ContextWrapper
                 registerNotificationSettingsReceiver(context)
-                if (!isOppoPod(device)) return@post
+                if (!supported) return@post
 
                 val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
                 if (currState == BluetoothHeadset.STATE_CONNECTED) {
                     statusBarManager.setIconVisibility("wireless_headset", true)
-                    RfcommController.connectPod(context, device, prefs)
+                    PodController.connectPod(context, device, prefs)
                 } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
                     statusBarManager.setIconVisibility("wireless_headset", false)
-                    RfcommController.disconnectedPod(context, device)
+                    PodController.disconnectedPod(context, device)
                 }
             }
         }
