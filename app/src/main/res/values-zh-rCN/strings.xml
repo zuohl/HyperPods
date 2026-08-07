@@ -168,6 +168,6 @@
     <string name="sleep_mode_summary">屏蔽触摸功能，耳机放回充电仓后自动退出</string>
     <string name="adaptive_volume">自适应音量</string>
     <string name="enabled">开启</string>
-    <string name="open_system_headset_settings">打开系统耳机设置</string>
-    <string name="open_system_headset_settings_summary">跳转到系统蓝牙详情页（ANC / LDAC）</string>
+    <string name="open_system_headset_settings">打开品牌官方 App</string>
+    <string name="open_system_headset_settings_summary">跳转到 QCY/vivo 官方 App；未安装则打开系统蓝牙详情页</string>
 </resources>

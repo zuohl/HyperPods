@@ -167,6 +167,6 @@
     <string name="sleep_mode_summary">Blocks touch controls until the earphones are returned to the case</string>
     <string name="adaptive_volume">Adaptive Volume</string>
     <string name="enabled">On</string>
-    <string name="open_system_headset_settings">Open system headset settings</string>
-    <string name="open_system_headset_settings_summary">Open the system Bluetooth detail page (ANC / LDAC)</string>
+    <string name="open_system_headset_settings">Open brand official app</string>
+    <string name="open_system_headset_settings_summary">Jump to the QCY/vivo official app; falls back to the system Bluetooth page</string>
 </resources>
