@@ -22,8 +22,8 @@ import java.util.WeakHashMap
 @SuppressLint("MissingPermission")
 object SettingsHeadsetHook : HookContext() {
     private const val TAG = "OppoPods-Settings"
-    private const val FAKE_DEVICE_ID = "01010901"
-    private const val FAKE_SUPPORT = "$FAKE_DEVICE_ID,000000000000000010000000"
+    private const val FAKE_DEVICE_ID = "01011604"
+    private const val FAKE_SUPPORT = "$FAKE_DEVICE_ID,111111001111000110101000"
     private const val PREFS_NAME = "oppopods_milink_state"
     private const val SETTINGS_REFRESH_INTERVAL_MS = 3_000L
     private val knownPodAddresses = linkedSetOf<String>()

@@ -31,7 +31,7 @@ import java.util.concurrent.CompletableFuture
 @SuppressLint("MissingPermission")
 object MiLinkServiceHook : HookContext() {
     private const val TAG = "OppoPods-MiLink"
-    private const val FAKE_DEVICE_ID = "01010901"
+    private const val FAKE_DEVICE_ID = "01011604"
     private const val PREFS_NAME = "oppopods_milink_state"
     private const val PANEL_REFRESH_THROTTLE_MS = 5_000L
     private const val FIND_RING_IDLE = 0

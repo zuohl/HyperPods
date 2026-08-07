@@ -28,8 +28,8 @@ object HeadsetStateDispatcher : HookContext() {
     private val knownPodAddresses = linkedSetOf<String>()
     private val hookedBinderClasses = linkedSetOf<String>()
 
-    private val FAKE_DEVICE_ID = "01010901"
-    private val FAKE_SUPPORT = "$FAKE_DEVICE_ID,000000000000000010000000"
+    private val FAKE_DEVICE_ID = "01011604"
+    private val FAKE_SUPPORT = "$FAKE_DEVICE_ID,111111001111000110101000"
 
     override fun onHook() {
         hookHeadsetServiceBinder()
