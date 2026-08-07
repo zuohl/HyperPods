@@ -645,6 +645,15 @@ object QcyController {
                 else -> "disconnected"
             }
         )
+        // Re-emit ACTION_PODS_CONNECTED on app UI init so the app's "connected" state
+        // reflects reality even when the pod connected before the app opened (the
+        // first-connect broadcast is gated on appUiActive and thus missed).
+        if (connected) {
+            sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
+                currentAddress?.let { putExtra("address", it) }
+                currentDeviceName?.let { putExtra("device_name", it) }
+            }
+        }
         currentBatteryParams?.let(::sendBatteryBroadcast)
         changeUIAncStatus(currentAnc)
         changeUIGameModeStatus(currentGameMode)

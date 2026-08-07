@@ -32,7 +32,7 @@ object MiBluetoothToastHook : HookContext() {
     private const val NOTIFICATION_TAG_PREFIX = "BTHeadset"
     private const val LEGACY_ISLAND_NOTIFICATION_TAG_PREFIX = "BTHeadsetIsland"
     private const val CONNECTION_CHANNEL_ID = "oppopods_connection_notification"
-    private const val CONNECTION_CHANNEL_NAME = "OppoPods"
+    private const val CONNECTION_CHANNEL_NAME = "HyperPods"
     private const val PENDING_INTENT_FLAGS =
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
 
