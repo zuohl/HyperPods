@@ -266,6 +266,7 @@ object QcyController {
         this.classicDevice = device
         this.currentAddress = device.address
         this.currentDeviceName = device.name
+        PodMetadata.markHeadset(device)
         restoreCachedEqState()
         if (appRequested) markAppUiActive()
         reconnectPending = false
@@ -276,6 +277,7 @@ object QcyController {
     }
 
     fun disconnectedPod(context: Context, device: BluetoothDevice) {
+        PodMetadata.clear(device)
         connected = false
         connecting = false
         showedConnectedToast = false
@@ -562,6 +564,7 @@ object QcyController {
                 setRegularBatteryLevel(mainBattery)
             }
         }
+        classicDevice?.let { PodMetadata.applyBattery(it, batteryParams) }
         sendBatteryBroadcast(batteryParams)
     }
 

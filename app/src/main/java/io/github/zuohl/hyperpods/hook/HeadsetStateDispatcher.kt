@@ -25,8 +25,14 @@ object HeadsetStateDispatcher : HookContext() {
     private var notificationSettingsContext: Context? = null
     private var notificationSettingsReceiver: BroadcastReceiver? = null
     private var bluetoothStateReceiverRegistered = false
+    private val knownPodAddresses = linkedSetOf<String>()
+    private val hookedBinderClasses = linkedSetOf<String>()
+
+    private val FAKE_DEVICE_ID = "01010901"
+    private val FAKE_SUPPORT = "$FAKE_DEVICE_ID,000000000000000010000000"
 
     override fun onHook() {
+        hookHeadsetServiceBinder()
         hookAfter(findMethodByParamCount("com.android.bluetooth.a2dp.A2dpService", "handleConnectionStateChanged", 3)) {
             val currState = args[2] as Int
             val fromState = args[1] as Int
@@ -43,14 +49,16 @@ object HeadsetStateDispatcher : HookContext() {
                 registerBluetoothStateReceiver(context)
                 if (!supported) return@post
 
-                // Derive the status-bar icon from the actually-connected profiles rather
-                // than flipping it blindly: a transient A2DP teardown (idle, call mode) or
-                // an already-connected-at-hook-install device should not hide the icon
-                // while the headset profile is still up.
-                updateHeadsetIcon(context)
                 if (currState == BluetoothHeadset.STATE_CONNECTED) {
+                    // Show directly: getConnectedDevices() lags a beat after the CONNECTED
+                    // event, so deriving the icon here races and hides it again.
+                    showHeadsetIcon(context)
                     PodController.connectPod(context, device, prefs)
                 } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
+                    // Re-evaluate: hide only when no supported pod remains in any profile,
+                    // so a transient A2DP teardown (idle, call mode) keeps the icon while
+                    // the headset profile is still up.
+                    updateHeadsetIcon(context)
                     PodController.disconnectedPod(context, device)
                 }
             }
@@ -105,10 +113,12 @@ object HeadsetStateDispatcher : HookContext() {
                 if (!PodController.supports(device)) return
                 val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
                 Log.d("HyperPods", "bt state action=${intent.action} state=$state device=${device.address}")
-                // Don't hide the icon just because one link dropped — re-derive from the
-                // actually-connected profiles instead.
-                updateHeadsetIcon(context)
-                if (state == BluetoothProfile.STATE_DISCONNECTED) {
+                // Only re-evaluate on disconnects: deriving on CONNECTED races with
+                // getConnectedDevices() lagging behind and actively hides the icon.
+                if (state == BluetoothProfile.STATE_DISCONNECTED || state == BluetoothProfile.STATE_DISCONNECTING) {
+                    // Don't hide the icon just because one link dropped — re-derive from the
+                    // actually-connected profiles instead.
+                    updateHeadsetIcon(context)
                     PodController.disconnectedPod(context, device)
                 }
             }
@@ -124,6 +134,13 @@ object HeadsetStateDispatcher : HookContext() {
         updateHeadsetIcon(context)
     }
 
+    private fun showHeadsetIcon(context: Context) {
+        runCatching {
+            val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
+            statusBarManager.setIconVisibility("wireless_headset", true)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun updateHeadsetIcon(context: Context?) {
         if (context == null) return
@@ -137,5 +154,147 @@ object HeadsetStateDispatcher : HookContext() {
             statusBarManager.setIconVisibility("wireless_headset", connected)
         }
         Log.d("HyperPods", "updateHeadsetIcon connected=$connected")
+    }
+
+    // ------------------------------------------------------------------
+    // MIUI headset-service binder faking (com.android.bluetooth).
+    // SystemUI queries IMiuiHeadsetService.checkSupport/isMiTWS in this process
+    // to decide whether to show the wireless_headset status-bar icon. Without the
+    // fake support the device is treated as unrecognized and the icon stays hidden
+    // even though setIconVisibility fills the slot.
+    // ------------------------------------------------------------------
+
+    private fun hookHeadsetServiceBinder() {
+        val serviceClassName = "com.android.bluetooth.ble.app.headset.BluetoothHeadsetService"
+        val serviceClass = findClassOrNull(serviceClassName)
+        if (serviceClass != null) {
+            runCatching {
+                hookAfter(findMethod(serviceClassName, "onBind", Intent::class.java)) {
+                    val binder = result ?: return@hookAfter
+                    installHeadsetBinderHooks(binder.javaClass)
+                }
+                Log.d("HyperPods", "BluetoothHeadsetService.onBind hook installed")
+            }.onFailure { Log.w("HyperPods", "hook BluetoothHeadsetService.onBind failed", it) }
+        } else {
+            Log.d("HyperPods", "BluetoothHeadsetService class not present")
+        }
+
+        listOf(
+            "com.android.bluetooth.ble.app.headset.BinderC6776v",
+            "com.android.bluetooth.ble.app.headset.v"
+        ).forEach { className ->
+            findClassOrNull(className)?.let { installHeadsetBinderHooks(it) }
+        }
+    }
+
+    private fun findClassOrNull(className: String): Class<*>? =
+        runCatching { findClass(className) }.getOrNull()
+
+    private fun installHeadsetBinderHooks(binderClass: Class<*>) {
+        val className = binderClass.name
+        if (!hookedBinderClasses.add(className)) return
+        Log.d("HyperPods", "headset binder class=$className")
+
+        runCatching {
+            hookBefore(findMethod(className, "checkSupport", BluetoothDevice::class.java)) {
+                val device = args[0] as? BluetoothDevice
+                if (!isSupportedPod(device)) return@hookBefore
+                result = FAKE_SUPPORT
+                Log.d("HyperPods", "checkSupport forced device=${device?.address} support=$FAKE_SUPPORT")
+            }
+        }.onFailure { Log.w("HyperPods", "hook checkSupport skipped", it) }
+
+        hookAddressStringResult(className, listOf("getDeviceInfo"), "getDeviceInfo") { FAKE_SUPPORT }
+        hookAddressStringResult(className, listOf("isSupportAudioSwitch", "mo19775z1", "z1"), "isSupportAudioSwitch") { "1" }
+        hookAddressBooleanResult(className, listOf("isMiTWS", "mo19771O0", "O0"), "isMiTWS", true)
+        hookAddressBooleanResult(className, listOf("checkIsMiTWS", "mo19766B", "B"), "checkIsMiTWS", true)
+        hookAddressBooleanResult(className, listOf("getRingFindState", "mo19772m0", "m0"), "getRingFindState", false)
+
+        runCatching {
+            hookBefore(findMethod(className, "setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java)) {
+                val command = args[0] as? Int
+                val device = args[2] as? BluetoothDevice
+                if (!isSupportedPod(device)) return@hookBefore
+                result = when (command) {
+                    102 -> "0"
+                    123 -> "4"
+                    else -> "1"
+                }
+                Log.d("HyperPods", "setCommonCommand forced command=$command device=${device?.address} result=$result")
+            }
+        }.onFailure { Log.w("HyperPods", "hook setCommonCommand skipped", it) }
+
+        hookBinderVoidDevice(className, "connect")
+        hookBinderVoidDevice(className, "getDeviceConfig")
+        hookBinderVoidDeviceString(className, "getCommonConfig")
+    }
+
+    private fun hookBinderVoidDevice(className: String, methodName: String) {
+        runCatching {
+            hookBefore(findMethod(className, methodName, BluetoothDevice::class.java)) {
+                val device = args[0] as? BluetoothDevice
+                if (!isSupportedPod(device)) return@hookBefore
+                result = null
+                Log.d("HyperPods", "$methodName swallowed device=${device?.address}")
+            }
+        }.onFailure { Log.w("HyperPods", "hook $methodName skipped", it) }
+    }
+
+    private fun hookBinderVoidDeviceString(className: String, methodName: String) {
+        runCatching {
+            hookBefore(findMethod(className, methodName, BluetoothDevice::class.java, String::class.java)) {
+                val device = args[0] as? BluetoothDevice
+                if (!isSupportedPod(device)) return@hookBefore
+                result = null
+                Log.d("HyperPods", "$methodName swallowed device=${device?.address}")
+            }
+        }.onFailure { Log.w("HyperPods", "hook $methodName skipped", it) }
+    }
+
+    private fun hookAddressStringResult(className: String, methodNames: List<String>, label: String, forced: () -> String) {
+        val methodName = methodNames.firstOrNull { name ->
+            runCatching { findMethod(className, name, String::class.java) }.isSuccess
+        } ?: run {
+            Log.w("HyperPods", "hook $label skipped: no method in $methodNames")
+            return
+        }
+        runCatching {
+            hookBefore(findMethod(className, methodName, String::class.java)) {
+                val address = args[0] as? String
+                if (address == null || !isKnownAddress(address)) return@hookBefore
+                result = forced()
+                Log.d("HyperPods", "$label forced address=$address result=$result")
+            }
+        }.onFailure { Log.w("HyperPods", "hook $label skipped", it) }
+    }
+
+    private fun hookAddressBooleanResult(className: String, methodNames: List<String>, label: String, forced: Boolean) {
+        val methodName = methodNames.firstOrNull { name ->
+            runCatching { findMethod(className, name, String::class.java) }.isSuccess
+        } ?: run {
+            Log.w("HyperPods", "hook $label skipped: no method in $methodNames")
+            return
+        }
+        runCatching {
+            hookBefore(findMethod(className, methodName, String::class.java)) {
+                val address = args[0] as? String
+                if (address == null || !isKnownAddress(address)) return@hookBefore
+                result = forced
+                Log.d("HyperPods", "$label forced address=$address result=$forced")
+            }
+        }.onFailure { Log.w("HyperPods", "hook $label skipped", it) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun isSupportedPod(device: BluetoothDevice?): Boolean {
+        if (device == null) return false
+        val address = runCatching { device.address }.getOrNull()
+        val result = PodController.supports(device) || (address != null && isKnownAddress(address))
+        if (result && address != null) knownPodAddresses.add(address.uppercase())
+        return result
+    }
+
+    private fun isKnownAddress(address: String): Boolean {
+        return address.uppercase() in knownPodAddresses
     }
 }
