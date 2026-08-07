@@ -64,9 +64,14 @@ object PodMetadata {
 
     @SuppressLint("MissingPermission")
     fun clear(device: BluetoothDevice) {
+        // is_untethered_headset is a *device-type* property (what SystemUI uses to decide
+        // whether to render the status-bar icon + battery), NOT a connection flag. Clearing
+        // it on a transient link drop (ACL power-save, single-bud gap) made MIUI forget the
+        // pod, and since nothing re-sets it until the next explicit reconnect, the icon
+        // disappeared until then. Leave it sticky; only stale battery is dropped, and it's
+        // re-written on the next connect anyway.
         runCatching {
-            device.setMetadata(METADATA_IS_UNTETHERED_HEADSET, byteArrayOf(0))
-            Log.d(TAG, "clear ${device.address}")
+            Log.d(TAG, "clear ${device.address} (untethered-headset kept)")
         }.onFailure { Log.w(TAG, "clear failed", it) }
     }
 

@@ -58,9 +58,14 @@ object HeadsetStateDispatcher : HookContext() {
                 } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
                     // Re-evaluate: hide only when no supported pod remains in any profile,
                     // so a transient A2DP teardown (idle, call mode) keeps the icon while
-                    // the headset profile is still up.
-                    updateHeadsetIcon(context)
-                    PodController.disconnectedPod(context, device)
+                    // the headset profile is still up. Don't clear the pod for a transient
+                    // drop that leaves the device connected on another profile.
+                    if (!hasAnyConnectedProfile(context, device)) {
+                        updateHeadsetIcon(context)
+                        PodController.disconnectedPod(context, device)
+                    } else {
+                        Log.d("HyperPods", "A2DP transient drop ignored (still connected) ${device.address}")
+                    }
                 }
             }
         }
@@ -117,10 +122,18 @@ object HeadsetStateDispatcher : HookContext() {
                 // Only re-evaluate on disconnects: deriving on CONNECTED races with
                 // getConnectedDevices() lagging behind and actively hides the icon.
                 if (state == BluetoothProfile.STATE_DISCONNECTED || state == BluetoothProfile.STATE_DISCONNECTING) {
-                    // Don't hide the icon just because one link dropped — re-derive from the
-                    // actually-connected profiles instead.
-                    updateHeadsetIcon(context)
-                    PodController.disconnectedPod(context, device)
+                    // A transient link drop (ACL power-save, single-bud gap, A2DP teardown
+                    // during a call) fires these events while the earphone is still around.
+                    // Only treat it as a real disconnect once NO profile is connected for
+                    // this device — otherwise we clear the pod's untethered-headset metadata
+                    // and hide the status-bar icon for nothing, and it never comes back until
+                    // the next explicit reconnect (the "icon occasionally disappears" bug).
+                    if (!hasAnyConnectedProfile(context, device)) {
+                        updateHeadsetIcon(context)
+                        PodController.disconnectedPod(context, device)
+                    } else {
+                        Log.d("HyperPods", "transient drop ignored (still connected) ${device.address}")
+                    }
                 }
             }
         }, IntentFilter().apply {
@@ -133,6 +146,22 @@ object HeadsetStateDispatcher : HookContext() {
         // Re-assert on registration so a pod already connected before the hook was
         // installed (BT toggle, process restart) still gets the icon.
         updateHeadsetIcon(context)
+    }
+
+    /**
+     * Whether [device] still has a live HFP/A2DP profile, i.e. this "disconnect" event was
+     * just a transient link drop rather than the earphone actually going away.
+     */
+    @SuppressLint("MissingPermission")
+    private fun hasAnyConnectedProfile(context: Context, device: BluetoothDevice): Boolean {
+        val bluetoothManager = context.getSystemService(BluetoothManager::class.java) ?: return false
+        val address = device.address
+        val connected = buildList {
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+        }.any { it.address == address }
+        Log.d("HyperPods", "hasAnyConnectedProfile addr=$address connected=$connected")
+        return connected
     }
 
     private fun showHeadsetIcon(context: Context) {

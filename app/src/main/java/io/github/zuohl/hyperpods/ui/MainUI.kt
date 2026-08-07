@@ -114,11 +114,12 @@ private fun connectedSupportedDevice(context: Context): BluetoothDevice? {
 /**
  * Opens the brand's official app (full native controls: LDAC, dual device, dynamic EQ,
  * game mode...), falling back to the system MiuiHeadsetActivity when the brand app isn't
- * installed or the device isn't a known brand.
+ * installed or the device isn't a known brand. Brand is derived from the connected
+ * device name (already known from the UI) so no BluetoothManager lookup is required.
  */
-private fun openNativeHeadsetSettings(context: Context) {
-    val device = connectedSupportedDevice(context)
-    val brand = device?.let { PodDetector.detectBrand(it) }
+private fun openNativeHeadsetSettings(context: Context, deviceName: String) {
+    val brand = PodDetector.brandByName(deviceName)
+    Log.d("HyperPods-MainUI", "openNativeHeadsetSettings name=$deviceName brand=$brand")
     val pkg = when (brand) {
         PodBrand.QCY -> "com.qcy.audio"
         PodBrand.VIVO -> "com.vivo.vivotws"
@@ -133,6 +134,7 @@ private fun openNativeHeadsetSettings(context: Context) {
             }.onFailure { Log.w("HyperPods-MainUI", "launch $pkg failed", it) }
             return
         }
+        Log.w("HyperPods-MainUI", "no launch intent for $pkg")
     }
     launchSystemHeadsetPage(context)
 }
@@ -832,7 +834,7 @@ fun MainUI(
                             onNoiseLevelChange = { setNoiseLevel(it) },
                             homeImageFile = PodImageStore.customFile(context, PodImageSlot.HOME_IMAGE),
                             onOpenMoreSettings = { backStack.add(Screen.MoreSettings) },
-                            onOpenSystemSettings = { openNativeHeadsetSettings(context) }
+                            onOpenSystemSettings = { openNativeHeadsetSettings(context, mainTitle.value) }
                         )
                         "connecting" -> Box(Modifier.padding(padding).fillMaxSize()) { ConnectingPage() }
                         "error" -> Box(Modifier.padding(padding).fillMaxSize()) { ErrorPage(onRetry = { appController.disconnect() }) }

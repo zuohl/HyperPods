@@ -5,7 +5,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 
     <queries>
+        <!-- 品牌官方 App 包，用于"打开品牌官方 App"入口。
+             Android 11+ 包可见性：不声明则 getLaunchIntentForPackage 返回 null。 -->
         <package android:name="com.heytap.headset" />
+        <package android:name="com.qcy.audio" />
+        <package android:name="com.vivo.vivotws" />
     </queries>
 
     <application
