@@ -90,6 +90,9 @@ object VivoController {
         registerReceiverIfNeeded(context)
         PodMetadata.markHeadset(device)
         connected.set(true)
+        // Reset per-connection so the super-island (shown on first battery report) fires on
+        // every fresh connect — not only the first after a bluetooth-process restart.
+        showedConnected = false
         sendAppConnectedBroadcast()
         Log.d(TAG, "vivo connected ${device.address}; opening persistent GAIA session")
         startSession(device)
@@ -104,6 +107,7 @@ object VivoController {
         handler.removeCallbacks(pollRunnable)
         currentBattery = null
         currentAnc = 1
+        showedConnected = false
         runCatching { socket?.close() }
         socket = null
         classicDevice?.let { PodMetadata.clear(it) }
@@ -152,11 +156,18 @@ object VivoController {
                 }
                 readLoop(sock)
             } catch (e: Throwable) {
-                Log.w(TAG, "session failed", e)
+                Log.w(TAG, "session failed (will retry)", e)
             } finally {
                 runCatching { socket?.close() }
                 socket = null
                 sessionActive.set(false)
+            }
+            // Retry after a short delay so a freshly-reconnected earphone whose SPP service is
+            // not ready yet (connection succeeded but read returned -1) still gets a session and
+            // thus triggers battery/super-island on this connection.
+            if (connected.get()) {
+                runCatching { Thread.sleep(2_000) }
+                if (connected.get()) startSession(device)
             }
         }.apply { isDaemon = true }.start()
     }

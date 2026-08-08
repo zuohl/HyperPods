@@ -56,7 +56,13 @@ object PodController {
     }
 
     fun disconnectedPod(context: Context, device: BluetoothDevice) {
-        val pod = activePod ?: selectPod(PodDetector.detectBrand(device)) ?: return
+        val pod = activePod ?: run {
+            // No active pod: already torn down by an earlier callback of the same disconnect
+            // (A2DP hook + profile receiver both fire for one real disconnect). Don't re-select
+            // a pod here — that would broadcast DISCONNECTED repeatedly for no reason.
+            Log.d(TAG, "disconnectedPod ignored: no active pod for ${device.address}")
+            return
+        }
         Log.d(TAG, "disconnectedPod device=${device.address} brand=${pod.brand}")
         pod.disconnectedPod(context, device)
         activePod = null
