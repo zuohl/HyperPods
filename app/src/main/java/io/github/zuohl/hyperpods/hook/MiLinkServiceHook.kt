@@ -15,10 +15,12 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.graphics.drawable.Drawable
 import io.github.zuohl.hyperpods.BuildConfig
+import io.github.zuohl.hyperpods.R
 import io.github.zuohl.hyperpods.pods.CustomButtonFunction
 import io.github.zuohl.hyperpods.pods.CustomButtonPosition
 import io.github.zuohl.hyperpods.pods.SpatialAudioMode
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
+import io.github.zuohl.hyperpods.utils.ModuleImageUtil
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.MilinkSpatialAudioOptionSettings
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey
@@ -54,7 +56,6 @@ object MiLinkServiceHook : HookContext() {
     private const val AUDIO_EFFECT_VIEW_ID = "audio_effect_view"
     private const val AUDIO_EFFECT_CARD_VIEW_ID = "audio_effect_card"
     private const val CUSTOM_BUTTON_CLICK_THROTTLE_MS = 300L
-    private const val MODULE_PACKAGE = "io.github.zuohl.hyperpods"
     private val knownPodAddresses = linkedSetOf<String>()
     private var context: Context? = null
     private var receiverRegistered = false
@@ -1691,17 +1692,11 @@ object MiLinkServiceHook : HookContext() {
         }.onFailure { Log.w(TAG, "applyIcon failed", it) }
     }
 
-    // 从模块 APK 跨包加载游戏模式图标并缓存（妙享进程无法直接访问模块资源）
+    // 从模块 APK 跨包加载游戏模式图标并缓存（妙享进程无法直接访问模块资源）。
+    // 用 R 常量 ID 而非 getIdentifier：resopt 折叠资源名但保留 ID，R 常量仍能解析。
     private fun loadGameModeIcon(view: View): Drawable? {
         gameModeIcon?.let { return it }
-        return runCatching {
-            val moduleContext = view.context.createPackageContext(
-                MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY
-            )
-            val resId = moduleContext.resources.getIdentifier("ic_game_mode", "drawable", MODULE_PACKAGE)
-            if (resId == 0) return null
-            moduleContext.getDrawable(resId)?.also { gameModeIcon = it }
-        }.onFailure { Log.w(TAG, "loadGameModeIcon failed", it) }.getOrNull()
+        return ModuleImageUtil.drawable(view.context, R.drawable.ic_game_mode)?.also { gameModeIcon = it }
     }
 
     private fun resourceEntryName(view: View, resId: Int): String? {

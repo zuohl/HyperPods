@@ -17,6 +17,7 @@ import android.util.Log
 import com.xzakota.hyper.notification.focus.FocusNotification
 import io.github.zuohl.hyperpods.pods.DeviceProfileStore
 import io.github.zuohl.hyperpods.utils.FocusIslandUtil
+import io.github.zuohl.hyperpods.utils.ModuleImageUtil
 import io.github.zuohl.hyperpods.utils.SystemApisUtils
 import io.github.zuohl.hyperpods.utils.SystemApisUtils.cancelAsUser
 import io.github.zuohl.hyperpods.utils.SystemApisUtils.notifyAsUser
@@ -218,13 +219,14 @@ object MiBluetoothToastHook : HookContext() {
                 val ancCycleIntent = Intent(OppoPodsAction.ACTION_CYCLE_ANC)
                 ancCycleIntent.setPackage("com.android.bluetooth")
                 ancCycleIntent.setIdentifier("BTHeadset$address")
+                // 耳机图标从模块 assets 加载：release 下 resopt 折叠资源名，getIdentifier 返回 0
+                // 取不到图；assets 按名加载不受影响。
+                val boxBitmap = ModuleImageUtil.bitmap(context, "img_box.png")
+                    ?: BitmapFactory.decodeResource(context.resources, android.R.drawable.stat_sys_data_bluetooth)
+                val headsetIcon = Icon.createWithBitmap(boxBitmap)
+                // 按钮文案走 R 常量 ID（resopt 保留 ID），仅需一个模块 context。
                 val moduleContext = context.createPackageContext(
                     "io.github.zuohl.hyperpods", Context.CONTEXT_IGNORE_SECURITY
-                )
-                // 按名字解析资源 ID，避免模块更新后资源 ID 移位导致跨进程取到错图
-                val boxId = moduleContext.resources.getIdentifier("img_box", "drawable", "io.github.zuohl.hyperpods")
-                val headsetIcon = Icon.createWithBitmap(
-                    BitmapFactory.decodeResource(moduleContext.resources, boxId)
                 )
                 val pendingIntent = PendingIntent.getActivity(
                     context,

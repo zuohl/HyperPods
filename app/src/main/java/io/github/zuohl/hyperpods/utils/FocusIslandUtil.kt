@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.xzakota.hyper.notification.focus.FocusNotification
-import io.github.zuohl.hyperpods.R
 import io.github.zuohl.hyperpods.pods.PodImageSlot
 import io.github.zuohl.hyperpods.pods.PodImageStore
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
@@ -23,7 +22,6 @@ object FocusIslandUtil {
     private const val CHANNEL_ID = "oppopods_focus_island"
     private const val CHANNEL_NAME = "OppoPods Battery"
     private const val NOTIFICATION_ID = 10086
-    private const val MODULE_PACKAGE = "io.github.zuohl.hyperpods"
     private const val ISLAND_TIMEOUT_SECONDS = 3
     private const val DISMISS_DELAY_MS = 4000L
 
@@ -41,18 +39,14 @@ object FocusIslandUtil {
             val leftText = if (leftConnected) "${batteryParams.left!!.battery}" else "-"
             val rightText = if (rightConnected) "${batteryParams.right!!.battery}" else "-"
 
-            // 从模块 APK 加载耳机图片为 Bitmap，避免跨包资源引用问题
-            val moduleContext = context.createPackageContext(
-                MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY
-            )
+            // 从模块 APK 加载耳机图片为 Bitmap，避免跨包资源引用问题。
             // 优先用用户自定义的岛图（经 ContentProvider 跨进程读取）；缺省回退模块内置资源。
-            // 内置资源按名字解析（而非编译期 R 常量），避免模块更新后资源 ID 移位取到错图。
+            // 内置资源从 assets 按名加载（而非 getIdentifier/R 常量）：release 下 resopt 会折叠
+            // 资源名，getIdentifier 返回 0 导致取不到图、超级岛不显示；assets 不受影响。
             val leftBitmap = loadCustomBitmap(context, PodImageSlot.ISLAND_LEFT)
-                ?: moduleContext.resources.getIdentifier("img_left", "drawable", MODULE_PACKAGE)
-                    .takeIf { it != 0 }?.let { BitmapFactory.decodeResource(moduleContext.resources, it) }
+                ?: ModuleImageUtil.bitmap(context, "img_left.png")
             val rightBitmap = loadCustomBitmap(context, PodImageSlot.ISLAND_RIGHT)
-                ?: moduleContext.resources.getIdentifier("img_right", "drawable", MODULE_PACKAGE)
-                    .takeIf { it != 0 }?.let { BitmapFactory.decodeResource(moduleContext.resources, it) }
+                ?: ModuleImageUtil.bitmap(context, "img_right.png")
 
             if (leftBitmap == null || rightBitmap == null) {
                 Log.e(TAG, "Failed to decode earphone icon bitmaps")
