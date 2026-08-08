@@ -58,6 +58,7 @@ SystemUI only shows the `wireless_headset` icon if the device is marked `is_unte
 - **Package visibility**: on Android 11+ any package we `setPackage`/launch must be in the manifest `<queries>` (e.g. `com.qcy.audio`, `com.vivo.vivotws`) or `getLaunchIntentForPackage`/broadcasts fail silently.
 - **Don't reboot the device / don't `setIconVisibility` in a tight re-assert loop.** Prefer `svc bluetooth` or killing the bluetooth process for state resets, and periodic sync (`syncConnectedPods`, 5s) over hot-path re-asserts.
 - **Machine-specific config must not be committed**: `local.properties`, and the keystore paths/passwords in `D:\Dev\.gradle\gradle.properties` (outside this repo). Only repo-level `gradle.properties` is safe.
+- **`resopt` collapses resource names in release builds** (the `org.lsposed.lsplugin.resopt` plugin renames drawables to `res/0z.png` …). Never look up the module's own drawables by string (`Resources.getIdentifier("img_left", …)`) from a host process — it returns 0 in release and features silently break (this was the "battery super island missing on the CI/release APK while debug works" bug). Load module images via `utils/ModuleImageUtil` (reads `assets/`, immune to resopt + resource-ID shift). R-constant IDs DO survive resopt; only name-based lookup breaks.
 
 ## Protocols & reverse-engineering
 
