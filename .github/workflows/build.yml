@@ -2,7 +2,6 @@ name: Build and Release APK
 
 on:
   push:
-    tags: [ "v*" ]
     branches: [ "master", "main" ]
   pull_request:
     branches: [ "master", "main" ]
@@ -49,7 +48,7 @@ jobs:
             exit 1
           fi
 
-          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || echo "unversioned")
+          VERSION_NAME="3.0.$(git rev-list --count HEAD)"
           SHORT_SHA=${GITHUB_SHA::7}
           OUT_NAME="HyperPods-${VERSION_NAME}-${SHORT_SHA}.apk"
 
@@ -81,6 +80,13 @@ jobs:
           path: ${{ steps.sign.outputs.apk_path }}
           if-no-files-found: error
 
+      - name: Compute release version
+        id: ver
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          echo "version=3.0.${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "tag=v3.0.${COUNT}" >> "$GITHUB_OUTPUT"
+
       - name: Send APK to Telegram
         if: ${{ steps.sign.outputs.signed == 'true' && github.event_name != 'pull_request' }}
         env:
@@ -104,11 +110,16 @@ jobs:
           fi
           echo "APK sent to Telegram successfully"
 
-      - name: Create GitHub Release
-        if: ${{ startsWith(github.ref, 'refs/tags/') && steps.sign.outputs.signed == 'true' }}
+      # Auto-release on every push to main, no manual tagging needed. The tag is derived
+      # from the commit count (v3.0.<revCount>) so each push produces a unique, sortable
+      # release. ncipollo creates the tag if it does not exist.
+      - name: Auto-create GitHub Release (push to main)
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.sign.outputs.signed == 'true' }}
         uses: ncipollo/release-action@v1
         with:
           token: ${{ github.token }}
+          tag: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.version }}
           artifacts: ${{ steps.sign.outputs.apk_path }}
           generateReleaseNotes: true
           makeLatest: true

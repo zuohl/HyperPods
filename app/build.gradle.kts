@@ -14,6 +14,14 @@ apksign {
     keyPasswordProperty = "KEY_PASSWORD"
 }
 
+// Monotonic build counter (number of commits on HEAD). Drives versionCode and the
+// auto-incremented patch of versionName so each GitHub release/tag is unique & sortable.
+val buildRevCount = runCatching {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+    }.standardOutput.asText.get().trim().toInt()
+}.getOrDefault(100)
+
 android {
     namespace = "io.github.zuohl.hyperpods"
     compileSdk = 37
@@ -22,12 +30,9 @@ android {
         applicationId = "io.github.zuohl.hyperpods"
         minSdk = 35
         targetSdk = 36
-        versionCode = runCatching {
-            providers.exec {
-                commandLine("git", "rev-list", "--count", "HEAD")
-            }.standardOutput.asText.get().trim().toInt()
-        }.getOrDefault(100)
-        versionName = "3.0.0"
+        versionCode = buildRevCount
+        // Auto-incrementing patch so every push gets a unique, sortable release version/tag.
+        versionName = "3.0.$buildRevCount"
         buildConfigField("long", "BUILD_TIMESTAMP", System.currentTimeMillis().toString())
     }
 
