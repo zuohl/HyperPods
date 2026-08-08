@@ -305,7 +305,12 @@ object QcyController {
     }
 
     fun disconnectedPod(context: Context, device: BluetoothDevice) {
-        PodMetadata.clear(device)
+        // Prefer this controller's OWN bound device (the QCY it connected to). The passed-in
+        // `device` is the A2DP event's device; when PodController tears us down to switch to a
+        // different brand (e.g. QCY still A2DP-connected but the user pairs a vivo/iQOO), that
+        // device is the NEW earphone — we must clean up the QCY, not the new one.
+        val own = classicDevice ?: device
+        PodMetadata.clear(own)
         connected = false
         connecting = false
         showedConnectedToast = false
@@ -330,10 +335,10 @@ object QcyController {
         reconnectHandler.removeCallbacksAndMessages(null)
         stopQcyAdvertisementScan()
         closeGatt()
-        MiuiStrongToastUtil.cancelPodsNotificationByMiuiBt(context, device)
+        MiuiStrongToastUtil.cancelPodsNotificationByMiuiBt(context, own)
         setRegularBatteryLevel(SystemApisUtils.BATTERY_LEVEL_UNKNOWN)
         sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_DISCONNECTED, force = true) {
-            putExtra("address", device.address)
+            putExtra("address", own.address)
         }
         changeUIConnectionState("disconnected")
     }

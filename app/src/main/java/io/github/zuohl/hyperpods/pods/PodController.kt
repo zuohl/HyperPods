@@ -29,12 +29,28 @@ object PodController {
         return selectPod(PodDetector.detectBrand(device)) != null
     }
 
+    /** Whether [device] is already the active pod (so sync doesn't re-adopt it repeatedly). */
+    fun isActivePod(device: BluetoothDevice): Boolean {
+        val active = activePod ?: return false
+        val addr = runCatching { device.address }.getOrNull()?.uppercase()
+        val activeAddr = active.currentStatusSnapshot().address?.uppercase()
+        return addr != null && addr == activeAddr
+    }
+
     fun connectPod(context: Context, device: BluetoothDevice, prefs: SharedPreferences, appRequested: Boolean = false) {
         val pod = selectPod(PodDetector.detectBrand(device)) ?: run {
             Log.d(TAG, "connectPod skipped: no routable pod for device=${device.address} name=${runCatching { device.name }.getOrNull()}")
             return
         }
         Log.d(TAG, "connectPod device=${device.address} name=${runCatching { device.name }.getOrNull()} brand=${pod.brand} appRequested=$appRequested")
+        // If a different pod was active (e.g. the previous QCY is still A2DP-connected while
+        // the user pairs a new brand), tear it down so its GATT heartbeat/advertisement/battery
+        // broadcasts stop polluting the UI with the old earphone's battery.
+        val previous = activePod
+        if (previous != null && previous !== pod) {
+            Log.d(TAG, "connectPod switching brand ${previous.brand} -> ${pod.brand}, cleaning up previous")
+            previous.disconnectedPod(context, device)
+        }
         activePod = pod
         pod.connectPod(context, device, prefs, appRequested)
     }
@@ -56,7 +72,7 @@ object PodController {
     private fun selectPod(brand: PodBrand?): Pod? = when (brand) {
         PodBrand.OPPO -> OppoPod
         PodBrand.QCY -> QcyPod
-        PodBrand.VIVO -> PassthroughPod
+        PodBrand.VIVO -> VivoPod
         PodBrand.GENERIC -> PassthroughPod
         null -> null
     }

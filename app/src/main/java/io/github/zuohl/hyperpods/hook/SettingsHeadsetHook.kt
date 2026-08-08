@@ -37,6 +37,12 @@ object SettingsHeadsetHook : HookContext() {
     private var currentName: String? = null
     private var currentBattery: BatteryParams = BatteryParams()
     private var currentAnc = 1
+    /** Per-address headset state. Multiple earphones can coexist (e.g. a QCY and a vivo/iQOO
+     *  both A2DP-connected), and the settings detail page opens per device — so battery/ANC
+     *  must be keyed by the device address, never shared across devices. Otherwise the page
+     *  for a newly-paired earphone would show the previous one's battery. */
+    private data class DeviceState(var battery: BatteryParams, var anc: Int)
+    private val deviceStates = HashMap<String, DeviceState>()
     private var milinkSpatialAudioOptionEnabled = OppoPodsPrefsKey.DEFAULT_MILINK_SPATIAL_AUDIO_OPTION_ENABLED
     private var proxyCheckSupportCalls = 0
     private var proxySetCommonCommandCalls = 0
@@ -407,10 +413,29 @@ object SettingsHeadsetHook : HookContext() {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
                         currentName = intent.getStringExtra("device_name") ?: currentName
                         currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
+                        // A newly connected earphone must start with an EMPTY battery state.
+                        // This pod may have no battery protocol (e.g. a passthrough/vivo device),
+                        // so if we left the previous device's value in place the detail page would
+                        // show the old earphone's battery (QCY residue bug). Only keep the state
+                        // if we've actually seen real battery data for THIS address.
+                        currentAddress?.let { addr ->
+                            deviceStates.getOrPut(addr.uppercase()) {
+                                DeviceState(BatteryParams(), 1)
+                            }
+                        }
+                        saveState(context)
+                        updateFragments()
                     }
                     OppoPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
-                        currentBattery = intent.batteryStatusCompat() ?: currentBattery
+                        val battery = intent.batteryStatusCompat()
+                        currentBattery = battery ?: currentBattery
+                        Log.i(TAG, "BATTERY_CHANGED recv addr=$currentAddress battery=${battery?.left?.battery}/${battery?.right?.battery}/${battery?.case?.battery}")
+                        // Keep per-device state so the detail page of a different coexisting
+                        // earphone shows ITS battery, not the last broadcaster's.
+                        currentAddress?.let { addr ->
+                            deviceStates.getOrPut(addr.uppercase()) { DeviceState(BatteryParams(), 1) }.battery = battery ?: BatteryParams()
+                        }
                         currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
                         saveState(context)
                         updateBatteryViews()
@@ -419,6 +444,9 @@ object SettingsHeadsetHook : HookContext() {
                     OppoPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
                         currentAnc = intent.getIntExtra("status", currentAnc)
+                        currentAddress?.let { addr ->
+                            deviceStates.getOrPut(addr.uppercase()) { DeviceState(BatteryParams(), 1) }.anc = currentAnc
+                        }
                         currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
                         saveState(context)
                         updateFragments()
@@ -461,9 +489,12 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun updateBatteryView(view: Any?) {
-        val values = settingsBatteryValues()
+        val device = batteryViews[view]
+        val addr = device?.address?.uppercase()
+        val battery = addr?.let { deviceStates[it]?.battery } ?: currentBattery
+        val values = settingsBatteryValues(battery)
         callMethod(view, "onBatteryChanged", values[0], values[1], values[2])
-        Log.d(TAG, "Battery.onBatteryChanged(int,int,int) forced=${values.joinToString(",")}")
+        Log.d(TAG, "Battery.onBatteryChanged(int,int,int) forced=${values.joinToString(",")} addr=$addr")
     }
 
     private fun updateFragments() {
@@ -476,18 +507,25 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun injectFragmentStatus(fragment: Any?) {
         runCatching {
-            val payload = "${settingsAncMode()}|0100;0101;0102;0103;0200;0201|${settingsBatteryString()}|00"
-            Log.d(TAG, "injectFragmentStatus payload=$payload ${fragmentDebug(fragment)}")
-            callMethod(fragment, "updateAtUiInfo", payload)
-            callMethod(fragment, "updateAncUi", settingsAncLevel(), false)
             val device = runCatching { getObjectField(fragment, "mDevice") as? BluetoothDevice }.getOrNull()
-            val address = device?.address
+            val address = device?.address?.uppercase()
+            // Battery/ANC keyed by the fragment's own device so coexisting earphones don't
+            // bleed each other's values into the detail page. If a device has a state entry
+            // (even an empty one, set on CONNECTED), use ITS battery; only fall back to the
+            // global currentBattery when we've never seen this address at all.
+            val st = address?.let { deviceStates[it] }
+            val battery = st?.battery ?: currentBattery
+            val anc = st?.anc ?: currentAnc
+            val payload = "${ancModeString(anc)}|0100;0101;0102;0103;0200;0201|${settingsBatteryString(battery)}|00"
+            Log.d(TAG, "injectFragmentStatus payload=$payload addr=$address ${fragmentDebug(fragment)}")
+            callMethod(fragment, "updateAtUiInfo", payload)
+            callMethod(fragment, "updateAncUi", ancLevelString(anc), false)
             if (address != null) {
-                val refreshPayload = settingsRefreshPayload()
+                val refreshPayload = settingsRefreshPayload(battery)
                 Log.d(TAG, "injectFragmentStatus refreshPayload=$refreshPayload address=$address")
                 callMethod(fragment, "refreshStatus", address, refreshPayload)
             }
-            Log.d(TAG, "fragment status injected anc=$currentAnc battery=${settingsBatteryString()}")
+            Log.d(TAG, "fragment status injected anc=$anc battery=${settingsBatteryString(battery)} addr=$address")
         }.onFailure { Log.w(TAG, "inject fragment status failed", it) }
     }
 
@@ -561,12 +599,20 @@ object SettingsHeadsetHook : HookContext() {
         return settingsBatteryValues().joinToString(",")
     }
 
+    private fun settingsBatteryString(battery: BatteryParams): String {
+        return settingsBatteryValues(battery).joinToString(",")
+    }
+
     private fun settingsBatteryValues(): List<Int> {
         loadState()
+        return settingsBatteryValues(currentBattery)
+    }
+
+    private fun settingsBatteryValues(battery: BatteryParams): List<Int> {
         return listOf(
-            batteryValue(currentBattery.left),
-            batteryValue(currentBattery.right),
-            batteryValue(currentBattery.case)
+            batteryValue(battery.left),
+            batteryValue(battery.right),
+            batteryValue(battery.case)
         )
     }
 
@@ -578,27 +624,35 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun settingsAncMode(): String {
         loadState()
-        return when (currentAnc) {
-            2 -> "1"
-            3 -> "2"
-            else -> "0"
-        }
+        return ancModeString(currentAnc)
+    }
+
+    private fun ancModeString(anc: Int): String = when (anc) {
+        2 -> "1"
+        3 -> "2"
+        else -> "0"
     }
 
     private fun settingsAncLevel(): String {
         loadState()
-        return when (currentAnc) {
-            2 -> "0100"
-            3 -> "0200"
-            else -> "0000"
-        }
+        return ancLevelString(currentAnc)
+    }
+
+    private fun ancLevelString(anc: Int): String = when (anc) {
+        2 -> "0100"
+        3 -> "0200"
+        else -> "0000"
     }
 
     private fun settingsRefreshPayload(): String {
-        val battery = settingsBatteryString().split(",")
-        val left = battery.getOrNull(0).orEmpty()
-        val right = battery.getOrNull(1).orEmpty()
-        val box = battery.getOrNull(2).orEmpty()
+        return settingsRefreshPayload(currentBattery)
+    }
+
+    private fun settingsRefreshPayload(battery: BatteryParams): String {
+        val batteryStr = settingsBatteryString(battery).split(",")
+        val left = batteryStr.getOrNull(0).orEmpty()
+        val right = batteryStr.getOrNull(1).orEmpty()
+        val box = batteryStr.getOrNull(2).orEmpty()
         val values = MutableList(16) { "" }
         values[0] = left
         values[1] = right

@@ -28,6 +28,8 @@ object HeadsetStateDispatcher : HookContext() {
     private var bluetoothStateReceiverRegistered = false
     private val knownPodAddresses = linkedSetOf<String>()
     private val hookedBinderClasses = linkedSetOf<String>()
+    private val syncHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var syncRunnable: Runnable? = null
 
     private val fakeDeviceId: String get() = FakeDeviceConfig.deviceId(prefs)
     private val fakeSupport: String get() = FakeDeviceConfig.support(prefs)
@@ -79,6 +81,7 @@ object HeadsetStateDispatcher : HookContext() {
         notificationSettingsContext = null
         notificationSettingsReceiverRegistered = false
         bluetoothStateReceiverRegistered = false
+        stopSyncLoop()
         RfcommController.shutdownForHotReload()
     }
 
@@ -122,12 +125,17 @@ object HeadsetStateDispatcher : HookContext() {
                 // Only re-evaluate on disconnects: deriving on CONNECTED races with
                 // getConnectedDevices() lagging behind and actively hides the icon.
                 if (state == BluetoothProfile.STATE_DISCONNECTED || state == BluetoothProfile.STATE_DISCONNECTING) {
-                    // A transient link drop (ACL power-save, single-bud gap, A2DP teardown
-                    // during a call) fires these events while the earphone is still around.
-                    // Only treat it as a real disconnect once NO profile is connected for
-                    // this device — otherwise we clear the pod's untethered-headset metadata
-                    // and hide the status-bar icon for nothing, and it never comes back until
-                    // the next explicit reconnect (the "icon occasionally disappears" bug).
+                    // ACL_DISCONNECTED is NOT a real disconnect: the earphone (esp. dual-mode
+                    // ones like vivo) briefly drops/re-establishes its ACL during initial
+                    // connect or power-save while A2DP/HFP stay up. Treating it as a disconnect
+                    // cleared the pod state and hid the icon even though the system list still
+                    // shows the earphone connected. Only HEADSET/A2DP profile disconnects can
+                    // be real, and even then only when no profile remains connected.
+                    if (intent.action == BluetoothDevice.ACTION_ACL_DISCONNECTED ||
+                        intent.action == BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED) {
+                        Log.d("HyperPods", "ACL drop ignored (not a real disconnect) ${device.address}")
+                        return@onReceive
+                    }
                     if (!hasAnyConnectedProfile(context, device)) {
                         updateHeadsetIcon(context)
                         PodController.disconnectedPod(context, device)
@@ -146,6 +154,45 @@ object HeadsetStateDispatcher : HookContext() {
         // Re-assert on registration so a pod already connected before the hook was
         // installed (BT toggle, process restart) still gets the icon.
         updateHeadsetIcon(context)
+        // Ensure any already-connected supported pod has a live controller. If the module
+        // loaded after the earphone connected (or a transient drop cleared activePod but the
+        // earphone stayed connected), the A2DP CONNECTED event won't fire again — so we adopt
+        // it here. Otherwise the module shows "no device" while the system list shows connected.
+        syncConnectedPods(context)
+        // Periodically re-sync so a transient ACL drop that briefly clears activePod gets
+        // re-adopted within a few seconds (the earphone stays connected but emits no new
+        // A2DP CONNECTED, so nothing else would restore the module/icon state).
+        stopSyncLoop()
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!bluetoothStateReceiverRegistered) return
+                syncConnectedPods(context)
+                syncHandler.postDelayed(this, 5_000L)
+            }
+        }
+        syncRunnable = runnable
+        syncHandler.postDelayed(runnable, 5_000L)
+    }
+
+    private fun stopSyncLoop() {
+        syncRunnable?.let { syncHandler.removeCallbacks(it) }
+        syncRunnable = null
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun syncConnectedPods(context: Context) {
+        val bluetoothManager = context.getSystemService(BluetoothManager::class.java) ?: return
+        val connected = buildList {
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+        }.distinctBy { it.address }
+        for (device in connected) {
+            if (!PodController.supports(device)) continue
+            if (PodController.isActivePod(device)) continue
+            Log.d("HyperPods", "syncConnectedPods: adopting ${device.address} ${runCatching { device.name }.getOrNull()}")
+            showHeadsetIcon(context)
+            PodController.connectPod(context, device, prefs)
+        }
     }
 
     /**

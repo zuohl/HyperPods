@@ -127,6 +127,32 @@ object PassthroughPod : Pod {
             address?.let { putExtra("address", it) }
             deviceName?.let { putExtra("device_name", it) }
         }
+        // Clear any stale battery from a previously connected protocol pod (e.g. QCY). This
+        // pod has no battery protocol, so the app must not keep showing the old earphone's
+        // battery. Broadcast an all-zero/not-connected BatteryParams to reset batteryParams.
+        sendBroadcast(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED) {
+            putExtra("address", address)
+            putExtra("left_battery", 0); putExtra("left_connected", false)
+            putExtra("right_battery", 0); putExtra("right_connected", false)
+            putExtra("case_battery", 0); putExtra("case_connected", false)
+        }
+        // Also broadcast the same reset to system processes (com.android.settings /
+        // com.milink.service) so the bluetooth detail page drops the previous device's
+        // battery too — sendBroadcast above is gated on app UI active and targets only the
+        // module app, but the settings hook listens in its own process.
+        val ctx2 = context ?: return
+        listOf("com.android.settings", "com.milink.service", "com.xiaomi.bluetooth").forEach { pkg ->
+            runCatching {
+                android.content.Intent(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED).apply {
+                    putExtra("address", address)
+                    putExtra("left_battery", 0); putExtra("left_connected", false)
+                    putExtra("right_battery", 0); putExtra("right_connected", false)
+                    putExtra("case_battery", 0); putExtra("case_connected", false)
+                    setPackage(pkg)
+                    ctx2.sendBroadcast(this)
+                }
+            }
+        }
     }
 
     private fun broadcastDisconnected(ctx: Context, deviceAddress: String) {
