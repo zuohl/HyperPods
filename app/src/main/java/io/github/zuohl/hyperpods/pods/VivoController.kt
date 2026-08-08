@@ -39,6 +39,7 @@ object VivoController {
     @Volatile private var currentBattery: BatteryParams? = null
     @Volatile private var currentAnc = 1
     private var receiverRegistered = false
+    private var showedConnected = false
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -228,6 +229,23 @@ object VivoController {
         )
         currentBattery = battery
         classicDevice?.let { PodMetadata.applyBattery(it, battery) }
+        if (!showedConnected) {
+            showedConnected = true
+            // First battery report -> battery super-island + connect broadcast, matching QCY.
+            sendAppConnectedBroadcast()
+            val ctx = context
+            val device = classicDevice
+            if (ctx != null && device != null) {
+                val settings = prefs?.let { io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings.fromPrefs(it) }
+                    ?: io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings()
+                io.github.zuohl.hyperpods.utils.miuiStrongToast.MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(ctx, battery, settings)
+            }
+        }
+        classicDevice?.let { device ->
+            context?.let { ctx ->
+                io.github.zuohl.hyperpods.utils.miuiStrongToast.MiuiStrongToastUtil.showPodsNotificationByMiuiBt(ctx, battery, device)
+            }
+        }
         sendBatteryBroadcast(battery)
         Log.d(TAG, "battery L=${b.leftPercent} R=${b.rightPercent} C=${b.casePercent}")
     }
