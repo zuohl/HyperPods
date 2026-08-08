@@ -433,13 +433,18 @@ fun MainUI(
                     }
 
                     OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
+                        Log.w("HyperPods-UI", "DISCONNECTED recv — clearing state, NOT finishing (will re-show on reconnect) addr=${p1.getStringExtra("address")}")
+                        // Only clear transient pod state; do NOT finish() the activity.
+                        // A disconnect broadcast can fire from a transient A2DP/ACL drop that
+                        // slipped past the hasAnyConnectedProfile guard (race), or from another
+                        // brand's controller (RfcommController/PassthroughPod). Finishing here
+                        // made the whole module app vanish ("app crashes") the moment the link
+                        // hiccupped — even though the earphone reconnects seconds later. The
+                        // next ACTION_PODS_CONNECTED restores hookConnected + title.
                         mainTitle.value = ""
                         hookConnected.value = false
                         hookEqPresetId.value = -1
                         hookDeviceEqPresets.value = emptyList()
-                        if (p0 is MainActivity) {
-                            p0.finish()
-                        }
                     }
 
                     OppoPodsAction.ACTION_BT_LOG_ENTRY -> {

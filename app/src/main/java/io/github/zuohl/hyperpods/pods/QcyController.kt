@@ -39,6 +39,11 @@ object QcyController {
     private const val MAX_RECONNECT_ATTEMPTS = 4
     private const val RECONNECT_DELAY_MS = 2_000L
     private const val SCAN_WINDOW_MS = 12_000L
+    /** If no battery packet arrives within this window while A2DP is up, the GATT data
+     *  channel is dead (another app — e.g. the official QCY app — grabbed the LE link, or
+     *  the link dropped without an onConnectionStateChange callback). Probe + reconnect. */
+    private const val GATT_HEARTBEAT_INTERVAL_MS = 5_000L
+    private const val GATT_STALE_AFTER_MS = 15_000L
     private const val SPATIAL_AUDIO_OFF = 0
     private const val SPATIAL_AUDIO_HEAD_TRACKING = 2
 
@@ -60,6 +65,16 @@ object QcyController {
     private var reconnectAttempts = 0
     private var reconnectPending = false
     private var scanning = false
+    @Volatile private var lastBatteryReceivedMs: Long = 0L
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private var heartbeatRunnable: Runnable? = null
+    /** Last LE MACs seen in a matching QCY advertisement, used to resolve the GATT peer. */
+    @Volatile private var lastAdvControlAddress: String? = null
+    @Volatile private var lastAdvOtherAddress: String? = null
+    /** The advertisement's *source* MAC is the actual LE (GATT) identity. On the QCY
+     *  Crossky C50S the classic peer is C4:33:96:10:64:23 while the LE peer advertises as
+     *  C4:33:96:10:64:76 — same prefix, only the last byte differs. */
+    @Volatile private var lastAdvSourceAddress: String? = null
 
     private var currentBatteryParams: BatteryParams? = null
     private var currentAnc: Int = 1
@@ -113,6 +128,14 @@ object QcyController {
             when (intent.action) {
                 OppoPodsAction.ACTION_PODS_UI_INIT -> {
                     markAppUiActive()
+                    if (!connected && classicDevice != null) {
+                        // App reopened with a dead data channel (GATT dropped while the app
+                        // was closed and hit the reconnect cap, or the broadcast that would
+                        // have reconnected was gated). Kick a fresh attempt so the user sees
+                        // live battery/ANC instead of a frozen snapshot.
+                        reconnectAttempts = 0
+                        scheduleReconnectIfNeeded("ui-init gatt-dead")
+                    }
                     emitUiSnapshot()
                 }
                 OppoPodsAction.ACTION_PODS_UI_CLOSED -> {
@@ -172,15 +195,20 @@ object QcyController {
                     gatt.requestMtu(512)
                     gatt.discoverServices()
                     changeUIConnectionState("connecting")
+                    startHeartbeat()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     connected = false
                     connecting = false
                     closeGatt()
-                    changeUIConnectionState("disconnected")
-                    sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_DISCONNECTED) {
-                        currentAddress?.let { putExtra("address", it) }
-                    }
+                    // A GATT drop is NOT an earphone disconnect — A2DP/HFP can stay up while
+                    // the BLE data channel dies (link idle, single-bud swap, BLE coex).
+                    // Do NOT broadcast ACTION_PODS_DISCONNECTED here: that clears the app's
+                    // state and finishes MainActivity (the "app crashes / shows 未连接" bug),
+                    // and the old code then refused to reconnect because currentBatteryParams
+                    // was non-null, freezing the battery at its last value forever.
+                    // The real disconnect is driven by the A2DP hook -> disconnectedPod().
+                    // Here we just try to bring the data channel back so battery/ANC refresh.
                     scheduleReconnectIfNeeded("gatt-disconnected status=$status")
                 }
             }
@@ -282,6 +310,8 @@ object QcyController {
         connecting = false
         showedConnectedToast = false
         currentBatteryParams = null
+        lastBatteryReceivedMs = 0L
+        stopHeartbeat()
         currentAnc = 1
         currentGameMode = false
         currentSpatialAudioMode = SPATIAL_AUDIO_OFF
@@ -450,14 +480,29 @@ object QcyController {
         val adapter = context.getSystemService(BluetoothManager::class.java).adapter ?: return
         val candidateName = buildLePeerName(classicDevice)
         val inferredAddress = inferLeAddress(classicDevice.address)
+        val classicPrefix = classicDevice.address.uppercase(Locale.ROOT).substringBeforeLast(':') + ':'
         val bonded = adapter.bondedDevices.orEmpty()
+        // A dual-mode TWS pair shares one MAC prefix between its classic (A2DP/HFP) and LE
+        // (GATT data) identities — only the final byte differs (C4:33:96:10:64:23 classic vs
+        // C4:33:96:10:64:76 LE on the QCY Crossky C50S). The LE peer is usually NOT in
+        // bondedDevices (it only advertises), so resolve it from (a) a same-prefix bonded
+        // device, (b) the LE MACs captured from the last advertisement. Without this we'd
+        // connectGatt the classic address, never establish the data channel, and the battery
+        // would freeze on the last advertisement value.
         leDevice = bonded.firstOrNull { device ->
+            if (device.address.equals(classicDevice.address, ignoreCase = true)) return@firstOrNull false
+            val addr = device.address.uppercase(Locale.ROOT)
             PodDetector.isQcyAppDevice(device) ||
-                device.address.equals(inferredAddress, ignoreCase = true) ||
+                addr.equals(inferredAddress, ignoreCase = true) ||
+                addr.startsWith(classicPrefix) ||
                 ((device.name ?: "").contains(candidateName, ignoreCase = true))
         } ?: inferredAddress?.let { address ->
             runCatching { adapter.getRemoteDevice(address) }.onFailure {
                 Log.w(TAG, "getRemoteDevice failed for inferred address=$address", it)
+            }.getOrNull()
+        } ?: matchAdvPeerAddress(adapter, classicDevice.address)?.let { address ->
+            runCatching { adapter.getRemoteDevice(address) }.onFailure {
+                Log.w(TAG, "getRemoteDevice failed for adv peer address=$address", it)
             }.getOrNull()
         }
         val target = leDevice ?: classicDevice
@@ -475,9 +520,34 @@ object QcyController {
         }
     }
 
+    /**
+     * Best-effort LE peer address for a dual-mode TWS pair. The LE identity shares the
+     * classic MAC prefix with only the final byte differing (C4:33:96:10:64:23 classic →
+     * C4:33:96:10:64:76 LE on the QCY Crossky C50S). Known QCY suffixes :CC→:99 are handled
+     * explicitly; otherwise we keep the classic address so the caller can still try it and
+     * rely on the advertisement-scanned peer (matchAdvPeerAddress) to supply the real LE MAC.
+     */
     private fun inferLeAddress(classicAddress: String): String? {
         val clean = classicAddress.uppercase(Locale.ROOT)
         return if (clean.endsWith(":CC")) clean.dropLast(2) + "99" else null
+    }
+
+    /**
+     * Resolve the LE peer for GATT from the last advertisement we saw: the advertisement's
+     * source MAC is the LE (GATT) identity, which is NOT in bondedDevices as a separate
+     * device. Used to connect the data channel on firmware whose classic suffix isn't a
+     * known :CC→:99 mapping (e.g. C50S classic :…64:23 → LE :…64:76).
+     */
+    private fun matchAdvPeerAddress(adapter: android.bluetooth.BluetoothAdapter, classicAddress: String): String? {
+        val classic = classicAddress.uppercase(Locale.ROOT)
+        val prefix = classic.substringBeforeLast(':') + ':'
+        val candidates = buildSet {
+            lastAdvSourceAddress?.uppercase(Locale.ROOT)?.let(::add)
+            lastAdvControlAddress?.uppercase(Locale.ROOT)?.let(::add)
+            lastAdvOtherAddress?.uppercase(Locale.ROOT)?.let(::add)
+        }.filter { it != classic && it.startsWith(prefix) }
+        Log.d(TAG, "matchAdvPeerAddress classic=$classic candidates=$candidates")
+        return candidates.firstOrNull()
     }
 
     private fun buildLePeerName(device: BluetoothDevice): String {
@@ -538,6 +608,7 @@ object QcyController {
 
     private fun handleBatteryChanged(batteryParams: BatteryParams) {
         currentBatteryParams = batteryParams
+        lastBatteryReceivedMs = SystemClock.elapsedRealtime()
         reconnectAttempts = 0
         reconnectPending = false
         reconnectHandler.removeCallbacksAndMessages(null)
@@ -586,6 +657,11 @@ object QcyController {
             TAG,
             "QCY advertisement battery source=${sourceDevice.address} control=${status.controlAddress} other=${status.otherAddress}"
         )
+        // Remember the LE MACs from the advertisement — these are the GATT peer identities
+        // (not separate bonded devices), used by matchAdvPeerAddress to connect the data channel.
+        status.controlAddress?.let { lastAdvControlAddress = it }
+        status.otherAddress?.let { lastAdvOtherAddress = it }
+        lastAdvSourceAddress = sourceDevice.address
         connected = connected || classicDevice != null
         connecting = false
         handleBatteryChanged(status.battery)
@@ -829,15 +905,6 @@ object QcyController {
     private fun scheduleReconnectIfNeeded(reason: String) {
         val ctx = context ?: return
         val device = classicDevice ?: return
-        if (!isAppUiActive()) {
-            Log.d(TAG, "skip reconnect reason=$reason appUiInactive")
-            return
-        }
-        if (currentBatteryParams != null) {
-            Log.d(TAG, "skip reconnect reason=$reason batteryAlreadyKnown")
-            reconnectAttempts = 0
-            return
-        }
         if (reconnectPending || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
             Log.d(
                 TAG,
@@ -845,16 +912,81 @@ object QcyController {
             )
             return
         }
+        // NOTE: do NOT skip when currentBatteryParams != null. "Battery already known once"
+        // is not a reason to stop refreshing — the GATT data channel is dead and must be
+        // brought back, otherwise the displayed battery freezes at its last value (the
+        // "电量不会变" bug). Bounded by MAX_RECONNECT_ATTEMPTS; disconnectedPod() cancels
+        // pending reconnects when the earphone truly goes away.
         reconnectPending = true
         reconnectAttempts += 1
         Log.d(TAG, "schedule reconnect attempt=$reconnectAttempts reason=$reason device=${device.address}")
         reconnectHandler.postDelayed({
             reconnectPending = false
-            if (!isAppUiActive()) return@postDelayed
             Log.d(TAG, "reconnect now attempt=$reconnectAttempts device=${device.address}")
             startQcyAdvertisementScan(ctx)
             connectLePeer(ctx, device)
         }, RECONNECT_DELAY_MS)
+    }
+
+    /**
+     * Background heartbeat that detects a dead GATT data channel and revives it.
+     *
+     * Why this exists: the QCY GATT link is exclusive — when another app (the official QCY
+     * app) opens, it grabs the LE connection out from under us. That teardown often does
+     * NOT fire our BluetoothGattCallback.onConnectionStateChange (it's torn down below the
+     * Java layer), so the normal reconnect path never runs and the displayed battery
+     * freezes at its last value forever ("模块电量不变" bug) even though A2DP stays up and
+     * the system tray shows the correct battery.
+     *
+     * While the pod's A2DP is connected, if no battery packet has arrived for
+     * [GATT_STALE_AFTER_MS], we treat the data channel as dead and kick a reconnect
+     * (resetting the attempt counter so recovery isn't gated by the prior cap).
+     */
+    private fun startHeartbeat() {
+        if (heartbeatRunnable != null) return
+        val runnable = object : Runnable {
+            override fun run() {
+                checkGattHealth()
+                heartbeatHandler.postDelayed(this, GATT_HEARTBEAT_INTERVAL_MS)
+            }
+        }
+        heartbeatRunnable = runnable
+        heartbeatHandler.postDelayed(runnable, GATT_HEARTBEAT_INTERVAL_MS)
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatRunnable?.let { heartbeatHandler.removeCallbacks(it) }
+        heartbeatRunnable = null
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun checkGattHealth() {
+        val device = classicDevice ?: return
+        val ctx = context ?: return
+        // Only probe while the earphone's classic profile is still up — once it's truly
+        // gone, disconnectedPod() stops the heartbeat.
+        val a2dpUp = runCatching {
+            val bm = ctx.getSystemService(BluetoothManager::class.java)
+            bm?.getConnectedDevices(BluetoothProfile.A2DP).orEmpty().any { it.address == device.address } ||
+                bm?.getConnectedDevices(BluetoothProfile.HEADSET).orEmpty().any { it.address == device.address }
+        }.getOrDefault(false)
+        if (!a2dpUp) {
+            Log.d(TAG, "heartbeat: A2DP down, skipping probe")
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        val stale = lastBatteryReceivedMs == 0L || (now - lastBatteryReceivedMs) > GATT_STALE_AFTER_MS
+        if (!stale) {
+            return // data channel is alive
+        }
+        Log.i(TAG, "heartbeat: GATT data channel stale (lastBattery=${lastBatteryReceivedMs} now=$now) — reconnecting")
+        // Official QCY app likely stole the LE link. Close our (dead) gatt handle and
+        // reconnect so battery/ANC refresh resumes once the LE link is free again.
+        reconnectAttempts = 0
+        reconnectPending = false
+        closeGatt()
+        startQcyAdvertisementScan(ctx)
+        connectLePeer(ctx, device)
     }
 
     private fun startQcyAdvertisementScan(context: Context) {
