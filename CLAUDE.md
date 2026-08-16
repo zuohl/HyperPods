@@ -45,6 +45,13 @@ Scope (see `resources/META-INF/xposed/scope.list`): `com.android.bluetooth`, `co
 
 Controllers broadcast via `OppoPodsAction` intent constants and the `BatteryParams`/`PodParams` types (package `utils/miuiStrongToast/data/`). The hook layer (`MiBluetoothToastHook`, `MiLinkServiceHook`, `SettingsHeadsetHook`) reads `PodController.currentStatusSnapshot()` and injects battery/ANC into the MIUI Bluetooth, MiLink, and Settings UIs. Popups / super island / persistent notification go through `MiuiStrongToastUtil` (sends `chen.action.oppopods.sendstrongtoast` to `com.xiaomi.bluetooth`).
 
+**Broadcast plumbing is centralized in `pods/PodBroadcaster.kt`** — all three controllers delegate to it and MUST NOT re-implement ad-hoc broadcasts. It provides:
+- `sendToApp(action)` — foreground broadcast to the module app (`package` = application id); QCY additionally gates the app side on `isAppUiActive()`.
+- `sendToSystem(action, address, name)` — loop over `com.milink.service`, `com.xiaomi.bluetooth`, `com.android.settings` with per-address extras (keyed state depends on `address`; a missing address breaks per-device isolation).
+- typed `sendConnected/sendBattery/sendAnc/sendDisconnected` (battery payload via `putBatteryStatus`), plus `showConnectionSuperIsland` / `showPersistentNotification` wrappers.
+
+Fixed a `PodBroadcaster`/super-island bug once and it applied to all three brands; that is the point. Brand-specific extras (OPPO eq/spatial/game actions, the richer OPPO connection popup block) stay in `RfcommController`.
+
 ### Status-bar icon
 
 SystemUI only shows the `wireless_headset` icon if the device is marked `is_untethered_headset` (metadata 6) AND the MIUI headset binder (`IMiuiHeadsetService`) reports support. `HeadsetStateDispatcher` both marks the metadata (`PodMetadata`) and fakes the binder (`checkSupport`/`isMiTWS`/`setCommonCommand`) for known pod addresses. `setIconVisibility("wireless_headset", …)` fills the slot.
