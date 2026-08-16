@@ -854,20 +854,8 @@ private fun AboutContent(
                         ),
                     ) {
                         ArrowPreference(
-                            title = "Leaf",
-                            onClick = { uriHandler.openUri("https://github.com/Leaf-lsgtky/") }
-                        )
-                        ArrowPreference(
-                            title = "zz1812",
-                            onClick = { uriHandler.openUri("https://www.coolapk.com/u/2370747") }
-                        )
-                        ArrowPreference(
-                            title = stringResource(R.string.author_star_zero),
-                            onClick = { uriHandler.openUri("https://www.coolapk.com/u/2380718") }
-                        )
-                        ArrowPreference(
-                            title = "Zhaoyi-ya",
-                            onClick = { uriHandler.openUri("https://github.com/Zhaoyi-ya") }
+                            title = "zuohl",
+                            onClick = { uriHandler.openUri("https://github.com/zuohl") }
                         )
                     }
 
@@ -895,6 +883,10 @@ private fun AboutContent(
                             Color.Transparent,
                         ),
                     ) {
+                        ArrowPreference(
+                            title = "Leaf-lsgtky/OppoPods",
+                            onClick = { uriHandler.openUri("https://github.com/Leaf-lsgtky/OppoPods") }
+                        )
                         ArrowPreference(
                             title = "Art-Chen/HyperPods",
                             onClick = { uriHandler.openUri("https://github.com/Art-Chen/HyperPods") }
