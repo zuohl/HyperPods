@@ -825,7 +825,7 @@ private fun AboutContent(
                     ) {
                         ArrowPreference(
                             title = stringResource(R.string.project_address),
-                            onClick = { uriHandler.openUri("https://github.com/Leaf-lsgtky/OppoPods") }
+                            onClick = { uriHandler.openUri("https://github.com/zuohl/HyperPods") }
                         )
                     }
 
