@@ -125,11 +125,9 @@ object RfcommController {
 
     private fun changeUIAncStatus(status: Int) {
         if (status < 1 || status > 4) return
-        Intent(OppoPodsAction.ACTION_PODS_ANC_CHANGED).apply {
-            this.putExtra("status", status)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_ANC_CHANGED) {
+            putExtra("status", status)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_ANC_CHANGED) {
             putExtra("status", status)
@@ -137,11 +135,9 @@ object RfcommController {
     }
 
     private fun changeUIBatteryStatus(status: BatteryParams) {
-        Intent(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED).apply {
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_BATTERY_CHANGED) {
             putBatteryStatus(status)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED) {
             putBatteryStatus(status)
@@ -149,11 +145,9 @@ object RfcommController {
     }
 
     private fun changeUIGameModeStatus(enabled: Boolean) {
-        Intent(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED).apply {
-            this.putExtra("enabled", enabled)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED) {
+            putExtra("enabled", enabled)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED) {
             putExtra("enabled", enabled)
@@ -178,11 +172,9 @@ object RfcommController {
     }
 
     private fun changeUIEqStatus() {
-        Intent(OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED).apply {
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED) {
             addEqExtras(this)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext?.sendBroadcast(this)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED) {
             addEqExtras(this)
@@ -191,11 +183,9 @@ object RfcommController {
 
     private fun changeUISpatialAudioStatus(mode: Int) {
         val normalizedMode = mode.coerceIn(SpatialAudioMode.OFF, SpatialAudioMode.HEAD_TRACKING)
-        Intent(OppoPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED).apply {
-            this.putExtra("mode", normalizedMode)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED) {
+            putExtra("mode", normalizedMode)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED) {
             putExtra("mode", normalizedMode)
@@ -203,11 +193,9 @@ object RfcommController {
     }
 
     private fun changeUISpatialSoundStatus(enabled: Boolean) {
-        Intent(OppoPodsAction.ACTION_PODS_SPATIAL_SOUND_CHANGED).apply {
-            this.putExtra("enabled", enabled)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_SPATIAL_SOUND_CHANGED) {
+            putExtra("enabled", enabled)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_SPATIAL_SOUND_CHANGED) {
             putExtra("enabled", enabled)
@@ -215,11 +203,9 @@ object RfcommController {
     }
 
     private fun changeUINoiseLevelStatus(level: Int) {
-        Intent(OppoPodsAction.ACTION_PODS_NOISE_LEVEL_CHANGED).apply {
-            this.putExtra("level", level)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_NOISE_LEVEL_CHANGED) {
+            putExtra("level", level)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_NOISE_LEVEL_CHANGED) {
             putExtra("level", level)
@@ -227,20 +213,16 @@ object RfcommController {
     }
 
     private fun changeUISmartAncLevel(level: Int) {
-        Intent(OppoPodsAction.ACTION_PODS_SMART_ANC_LEVEL_CHANGED).apply {
-            this.putExtra("level", level)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_SMART_ANC_LEVEL_CHANGED) {
+            putExtra("level", level)
         }
     }
 
     private fun changeUIAutoPlayPauseStatus(enabled: Boolean) {
-        Intent(OppoPodsAction.ACTION_PODS_AUTO_PLAY_PAUSE_CHANGED).apply {
-            this.putExtra("enabled", enabled)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_AUTO_PLAY_PAUSE_CHANGED) {
+            putExtra("enabled", enabled)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_AUTO_PLAY_PAUSE_CHANGED) {
             putExtra("enabled", enabled)
@@ -248,12 +230,10 @@ object RfcommController {
     }
 
     private fun changeUIDualDeviceStatus(enabled: Boolean) {
-        Intent(OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CHANGED).apply {
-            this.putExtra("enabled", enabled)
-            this.putExtra("devices_received", false)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CHANGED) {
+            putExtra("enabled", enabled)
+            putExtra("devices_received", false)
         }
         sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CHANGED) {
             putExtra("enabled", enabled)
@@ -261,12 +241,10 @@ object RfcommController {
     }
 
     private fun changeUIConnectedDevicesStatus(devices: List<ConnectedDevice>) {
-        Intent(OppoPodsAction.ACTION_PODS_CONNECTED_DEVICES_CHANGED).apply {
-            this.putParcelableArrayListExtra("devices", ArrayList(devices))
-            this.putExtra("devices_received", currentConnectedDevicesReceived)
-            this.`package` = BuildConfig.APPLICATION_ID
-            this.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            mContext!!.sendBroadcast(this)
+        val ctx = mContext ?: return
+        PodBroadcaster.sendToApp(ctx, OppoPodsAction.ACTION_PODS_CONNECTED_DEVICES_CHANGED) {
+            putParcelableArrayListExtra("devices", ArrayList(devices))
+            putExtra("devices_received", currentConnectedDevicesReceived)
         }
     }
 
@@ -702,18 +680,13 @@ object RfcommController {
 
     private fun sendExternalPodsStatusBroadcast(action: String, fill: Intent.() -> Unit = {}) {
         val ctx = mContext ?: return
-        listOf("com.milink.service", "com.xiaomi.bluetooth", "com.android.settings").forEach { targetPackage ->
-            Intent(action).apply {
-                if (::mDevice.isInitialized) {
-                    putExtra("address", mDevice.address)
-                    putExtra("device_name", mDevice.name ?: cachedDeviceName)
-                }
-                fill()
-                setPackage(targetPackage)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                ctx.sendBroadcast(this)
-            }
-        }
+        PodBroadcaster.sendToSystem(
+            ctx,
+            action,
+            if (::mDevice.isInitialized) mDevice.address else null,
+            if (::mDevice.isInitialized) mDevice.name ?: cachedDeviceName else null,
+            fill,
+        )
     }
 
     private fun broadcastResolvedProfile(profile: DeviceProfile) {

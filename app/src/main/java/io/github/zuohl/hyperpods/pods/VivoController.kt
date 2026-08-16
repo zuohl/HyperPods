@@ -8,11 +8,9 @@ import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import io.github.zuohl.hyperpods.BuildConfig
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams
-import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.putBatteryStatus
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -249,12 +247,12 @@ object VivoController {
             if (ctx != null && device != null) {
                 val settings = prefs?.let { io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings.fromPrefs(it) }
                     ?: io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings()
-                io.github.zuohl.hyperpods.utils.miuiStrongToast.MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(ctx, battery, settings)
+                PodBroadcaster.showConnectionSuperIsland(ctx, battery, settings)
             }
         }
         classicDevice?.let { device ->
             context?.let { ctx ->
-                io.github.zuohl.hyperpods.utils.miuiStrongToast.MiuiStrongToastUtil.showPodsNotificationByMiuiBt(ctx, battery, device)
+                PodBroadcaster.showPersistentNotification(ctx, battery, device)
             }
         }
         sendBatteryBroadcast(battery)
@@ -301,77 +299,20 @@ object VivoController {
 
     private fun sendAncBroadcast() {
         val ctx = context ?: return
-        android.content.Intent(OppoPodsAction.ACTION_PODS_ANC_CHANGED).apply {
-            classicDevice?.address?.let { putExtra("address", it) }
-            putExtra("status", currentAnc)
-            `package` = BuildConfig.APPLICATION_ID
-            addFlags(android.content.Intent.FLAG_RECEIVER_FOREGROUND)
-        }.let { ctx.sendBroadcast(it) }
-        listOf("com.android.settings", "com.milink.service", "com.xiaomi.bluetooth").forEach { pkg ->
-            runCatching {
-                ctx.sendBroadcast(
-                    android.content.Intent(OppoPodsAction.ACTION_PODS_ANC_CHANGED).apply {
-                        classicDevice?.address?.let { putExtra("address", it) }
-                        putExtra("status", currentAnc)
-                        setPackage(pkg)
-                    }
-                )
-            }
-        }
+        PodBroadcaster.sendAnc(ctx, classicDevice?.address, currentAnc)
     }
 
     private fun sendAppConnectedBroadcast() {
         val ctx = context ?: return
-        val addr = classicDevice?.address
-        val name = classicDevice?.name
-        android.content.Intent(OppoPodsAction.ACTION_PODS_CONNECTED).apply {
-            addr?.let { putExtra("address", it) }
-            name?.let { putExtra("device_name", it) }
-            `package` = BuildConfig.APPLICATION_ID
-            addFlags(android.content.Intent.FLAG_RECEIVER_FOREGROUND)
-        }.let { ctx.sendBroadcast(it) }
-        listOf("com.android.settings", "com.milink.service", "com.xiaomi.bluetooth").forEach { pkg ->
-            runCatching {
-                ctx.sendBroadcast(
-                    android.content.Intent(OppoPodsAction.ACTION_PODS_CONNECTED).apply {
-                        addr?.let { putExtra("address", it) }
-                        name?.let { putExtra("device_name", it) }
-                        setPackage(pkg)
-                    }
-                )
-            }
-        }
+        PodBroadcaster.sendConnected(ctx, classicDevice?.address, classicDevice?.name)
     }
 
     private fun sendBatteryBroadcast(battery: BatteryParams) {
         val ctx = context ?: return
-        val addr = classicDevice?.address
-        android.content.Intent(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED).apply {
-            addr?.let { putExtra("address", it) }
-            putBatteryStatus(battery)
-        }.let { base ->
-            ctx.sendBroadcast(base.apply { `package` = BuildConfig.APPLICATION_ID }.addFlags(android.content.Intent.FLAG_RECEIVER_FOREGROUND))
-            listOf("com.android.settings", "com.milink.service", "com.xiaomi.bluetooth").forEach { pkg ->
-                runCatching { ctx.sendBroadcast(android.content.Intent(base).setPackage(pkg)) }
-            }
-        }
+        PodBroadcaster.sendBattery(ctx, classicDevice?.address, battery)
     }
 
     private fun sendDisconnectedBroadcast(context: Context, device: BluetoothDevice) {
-        android.content.Intent(OppoPodsAction.ACTION_PODS_DISCONNECTED).apply {
-            putExtra("address", device.address)
-            `package` = BuildConfig.APPLICATION_ID
-            addFlags(android.content.Intent.FLAG_RECEIVER_FOREGROUND)
-        }.let { context.sendBroadcast(it) }
-        listOf("com.android.settings", "com.milink.service", "com.xiaomi.bluetooth").forEach { pkg ->
-            runCatching {
-                context.sendBroadcast(
-                    android.content.Intent(OppoPodsAction.ACTION_PODS_DISCONNECTED).apply {
-                        putExtra("address", device.address)
-                        setPackage(pkg)
-                    }
-                )
-            }
-        }
+        PodBroadcaster.sendDisconnected(context, device.address)
     }
 }

@@ -20,7 +20,6 @@ import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import io.github.zuohl.hyperpods.BuildConfig
 import io.github.zuohl.hyperpods.config.QcyEqConfig
 import io.github.zuohl.hyperpods.config.QcyEqPrefs
 import android.util.Log
@@ -29,6 +28,7 @@ import io.github.zuohl.hyperpods.utils.miuiStrongToast.MiuiStrongToastUtil
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
+import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.putBatteryStatus
 import java.util.Locale
 import java.util.ArrayDeque
 
@@ -628,12 +628,12 @@ object QcyController {
             val device = classicDevice
             if (ctx != null && device != null) {
                 val notificationSettings = prefs?.let { NotificationSettings.fromPrefs(it) } ?: NotificationSettings()
-                MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(ctx, batteryParams, notificationSettings)
+                PodBroadcaster.showConnectionSuperIsland(ctx, batteryParams, notificationSettings)
             }
         }
         classicDevice?.let { device ->
             context?.let { ctx ->
-                MiuiStrongToastUtil.showPodsNotificationByMiuiBt(ctx, batteryParams, device)
+                PodBroadcaster.showPersistentNotification(ctx, batteryParams, device)
                 val mainBattery = listOfNotNull(batteryParams.left, batteryParams.right)
                     .filter { it.isConnected }
                     .minOfOrNull { it.battery } ?: SystemApisUtils.BATTERY_LEVEL_UNKNOWN
@@ -675,39 +675,15 @@ object QcyController {
     private fun sendBatteryBroadcast(status: BatteryParams) {
         sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED) {
             currentAddress?.let { putExtra("address", it) }
-            putExtra("status", status)
-            putExtra("left_battery", status.left?.battery ?: 0)
-            putExtra("left_charging", status.left?.isCharging == true)
-            putExtra("left_connected", status.left?.isConnected == true)
-            putExtra("right_battery", status.right?.battery ?: 0)
-            putExtra("right_charging", status.right?.isCharging == true)
-            putExtra("right_connected", status.right?.isConnected == true)
-            putExtra("case_battery", status.case?.battery ?: 0)
-            putExtra("case_charging", status.case?.isCharging == true)
-            putExtra("case_connected", status.case?.isConnected == true)
+            putBatteryStatus(status)
         }
         // Also broadcast to system processes that need battery data
         // (com.android.settings, com.xiaomi.bluetooth) even when module UI is inactive.
         // These processes have their own broadcast receivers in SettingsHeadsetHook
         // and BluetoothUpstreamHeadsetHook that depend on this data.
         val ctx = context ?: return
-        listOf("com.android.settings", "com.xiaomi.bluetooth", "com.milink.service").forEach { pkg ->
-            Intent(OppoPodsAction.ACTION_PODS_BATTERY_CHANGED).apply {
-                currentAddress?.let { putExtra("address", it) }
-                putExtra("status", status)
-                putExtra("left_battery", status.left?.battery ?: 0)
-                putExtra("left_charging", status.left?.isCharging == true)
-                putExtra("left_connected", status.left?.isConnected == true)
-                putExtra("right_battery", status.right?.battery ?: 0)
-                putExtra("right_charging", status.right?.isCharging == true)
-                putExtra("right_connected", status.right?.isConnected == true)
-                putExtra("case_battery", status.case?.battery ?: 0)
-                putExtra("case_charging", status.case?.isCharging == true)
-                putExtra("case_connected", status.case?.isConnected == true)
-                setPackage(pkg)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                ctx.sendBroadcast(this)
-            }
+        PodBroadcaster.sendToSystem(ctx, OppoPodsAction.ACTION_PODS_BATTERY_CHANGED, currentAddress) {
+            putBatteryStatus(status)
         }
     }
 
@@ -824,12 +800,7 @@ object QcyController {
     private fun sendAppStatusBroadcast(action: String, force: Boolean = false, fill: Intent.() -> Unit = {}) {
         val ctx = context ?: return
         if (!force && !isAppUiActive()) return
-        Intent(action).apply {
-            fill()
-            `package` = BuildConfig.APPLICATION_ID
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            ctx.sendBroadcast(this)
-        }
+        PodBroadcaster.sendToApp(ctx, action, fill)
     }
 
     private fun registerReceiverIfNeeded(context: Context) {
