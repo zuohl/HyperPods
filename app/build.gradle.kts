@@ -29,7 +29,7 @@ android {
     defaultConfig {
         applicationId = "io.github.zuohl.hyperpods"
         minSdk = 35
-        targetSdk = 36
+        targetSdk = 37
         versionCode = buildRevCount
         // Auto-incrementing patch so every push gets a unique, sortable release version/tag.
         versionName = "3.0.$buildRevCount"
