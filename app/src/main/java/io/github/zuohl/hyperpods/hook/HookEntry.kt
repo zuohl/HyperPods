@@ -49,16 +49,9 @@ class HookEntry : XposedModule() {
             "com.milink.service" -> MiLinkServiceHook
             "com.xiaomi.bluetooth" -> MiBluetoothToastHook
             "com.android.settings" -> {
-                val p = getRemotePreferences("oppopods_settings")
-                val style = p.getInt(
-                    OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
-                    OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
-                )
-                if (style == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_CLASSIC) {
-                    SettingsHeadsetHook
-                } else {
-                    SettingsDetailsHook
-                }
+                loadHook(SettingsDetailsHook, classLoader)
+                loadHook(SettingsHeadsetHook, classLoader)
+                return
             }
             else -> return
         }

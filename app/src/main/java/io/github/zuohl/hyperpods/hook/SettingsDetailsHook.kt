@@ -260,35 +260,29 @@ object SettingsDetailsHook : HookContext() {
     // 5. 页面生命周期与广播监听
     // -----------------------------------------------------------------------------------------
     private fun hookFragmentLifecycle() {
-        val fragmentClassNames = listOf(
-            "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment",
-            "com.android.settings.bluetooth.BluetoothDetailsConfigurableFragment"
-        )
-        fragmentClassNames.forEach { className ->
-            val cls = findClassOrNull(className) ?: return@forEach
-            runCatching {
-                hookAfter(findMethod(cls.name, "onStart")) {
-                    val frag = instance ?: return@hookAfter
-                    if (!isSupportedFragment(frag)) return@hookAfter
-                    fragments[frag] = true
-                    val ctx = runCatching { callMethod(frag, "getContext") as? Context }.getOrNull()
-                    if (ctx != null) {
-                        context = ctx.applicationContext ?: ctx
-                        registerStatusReceiver(ctx)
-                        loadState()
-                    }
-                    requestBluetoothStatus("onStart")
-                    startRefreshLoop()
+        runCatching {
+            hookAfter(findMethod("androidx.fragment.app.Fragment", "onStart")) {
+                val frag = instance ?: return@hookAfter
+                if (!isSupportedFragment(frag)) return@hookAfter
+                fragments[frag] = true
+                val ctx = runCatching { callMethod(frag, "getContext") as? Context }.getOrNull()
+                if (ctx != null) {
+                    context = ctx.applicationContext ?: ctx
+                    registerStatusReceiver(ctx)
+                    loadState()
                 }
-                hookAfter(findMethod(cls.name, "onStop")) {
-                    val frag = instance ?: return@hookAfter
-                    fragments.remove(frag)
-                    if (fragments.isEmpty()) {
-                        stopRefreshLoop()
-                    }
+                requestBluetoothStatus("onStart")
+                startRefreshLoop()
+            }
+            hookAfter(findMethod("androidx.fragment.app.Fragment", "onStop")) {
+                val frag = instance ?: return@hookAfter
+                if (!isSupportedFragment(frag)) return@hookAfter
+                fragments.remove(frag)
+                if (fragments.isEmpty()) {
+                    stopRefreshLoop()
                 }
-            }.onFailure { Log.w(TAG, "hook $className lifecycle skipped", it) }
-        }
+            }
+        }.onFailure { Log.w(TAG, "hook Fragment lifecycle skipped", it) }
     }
 
     private fun startRefreshLoop() {

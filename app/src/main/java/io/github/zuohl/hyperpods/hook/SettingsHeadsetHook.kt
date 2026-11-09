@@ -1,6 +1,8 @@
 package io.github.zuohl.hyperpods.hook
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -87,7 +89,33 @@ object SettingsHeadsetHook : HookContext() {
                 val intent = callMethod(instance, "getIntent") as? Intent ?: return@hookBefore
                 val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
                 Log.d(TAG, "Activity.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownPodAddresses current=$currentAddress")
-                if (!isSupportedPod(device)) return@hookBefore
+                val isPod = isSupportedPod(device) || (device != null && isKnownPodAddress(device.address))
+                if (!isPod) return@hookBefore
+
+                val pageStyle = prefs?.getInt(
+                    OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
+                    OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
+                ) ?: OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
+                if (pageStyle == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_NATIVE) {
+                    val act = instance as? Activity
+                    val targetDev = device ?: currentAddress?.let { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(it) }
+                    if (act != null && targetDev != null) {
+                        Log.i(TAG, "Redirecting MiuiHeadsetActivity to native BluetoothDeviceDetailsFragment")
+                        val targetIntent = Intent().apply {
+                            setClassName("com.android.settings", "com.android.settings.SubSettings")
+                            putExtra(":settings:show_fragment", "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment")
+                            val bundle = Bundle().apply {
+                                putParcelable("device", targetDev)
+                            }
+                            putExtra(":settings:show_fragment_args", bundle)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        act.startActivity(targetIntent)
+                        act.finish()
+                        result = null
+                        return@hookBefore
+                    }
+                }
                 intent.putExtra("MIUI_HEADSET_SUPPORT", fakeSupport)
                 intent.putExtra("COME_FROM", intent.getStringExtra("COME_FROM") ?: "MIUI_BLUETOOTH_SETTINGS")
                 intent.putExtra("DEVICE_ID", fakeDeviceId)
@@ -126,7 +154,15 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun hookSupportChecks() {
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "checkSupport") { support ->
-            support.startsWith(fakeDeviceId) || support.contains(fakeDeviceId)
+            val style = prefs?.getInt(
+                OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
+                OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
+            ) ?: OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
+            if (style == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_CLASSIC) {
+                support.startsWith(fakeDeviceId) || support.contains(fakeDeviceId)
+            } else {
+                false
+            }
         }
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isTWS01Headset") { it == fakeDeviceId }
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "isK77sHeadset") { false }
@@ -363,10 +399,12 @@ object SettingsHeadsetHook : HookContext() {
                 val key = args[0] as? String
                 val data = args[1] as? String
                 Log.d(TAG, "Fragment.refreshStatus before key=$key data=$data ${fragmentDebug(instance)} isOppo=${isOppoFragment(instance)}")
-                if (isOppoFragment(instance) && key?.startsWith("MMA_CONNECTION_FAILED") == true) {
+                val isMmaFailure = key?.contains("MMA_CONNECTION_FAILED") == true || key?.contains("DISCONNECT") == true
+                if (isOppoFragment(instance) && isMmaFailure) {
                     Log.w(TAG, "Fragment.refreshStatus swallowed MMA failure for virtual Oppo device key=$key")
                     injectFragmentStatus(instance)
                     result = null
+                    return@hookBefore
                 }
             }
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.refreshStatus skipped", it) }
@@ -553,6 +591,10 @@ object SettingsHeadsetHook : HookContext() {
         val device = runCatching { getObjectField(fragment, "mDevice") as? BluetoothDevice }.getOrNull()
         val deviceId = runCatching { getObjectField(fragment, "mDeviceId") as? String }.getOrNull()
         val support = runCatching { getObjectField(fragment, "mSupport") as? String }.getOrNull()
+        val addr = runCatching { device?.address }.getOrNull()
+        if (addr != null && (isKnownPodAddress(addr) || addr.equals(currentAddress, ignoreCase = true))) {
+            return true
+        }
         return isSupportedPod(device) || deviceId == fakeDeviceId || support?.startsWith(fakeDeviceId) == true
     }
 
