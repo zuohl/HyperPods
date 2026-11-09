@@ -57,6 +57,10 @@
     <string name="custom_button_position">Custom button position</string>
     <string name="custom_button_position_upper">Upper (Find earbuds card)</string>
     <string name="custom_button_position_lower">Lower (Spatial audio card)</string>
+    <string name="settings_page_style">Bluetooth settings style</string>
+    <string name="settings_page_style_summary">Choose the Bluetooth settings page interface style</string>
+    <string name="settings_page_style_native">Native data-driven (Recommended)</string>
+    <string name="settings_page_style_classic">Classic Xiaomi headset</string>
     <string name="device_profiles">Device profiles</string>
     <string name="profiles_mode">Profile source</string>
     <string name="profiles_mode_auto">Auto detect</string>

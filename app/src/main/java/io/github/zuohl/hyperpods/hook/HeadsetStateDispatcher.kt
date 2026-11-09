@@ -37,6 +37,45 @@ object HeadsetStateDispatcher : HookContext() {
 
     override fun onHook() {
         hookHeadsetServiceBinder()
+        // LE Audio (LC3) support:
+        // When HyperOS switches to LC3 steady state, it tears down A2DP/HFP.
+        // Hook LeAudioService.deviceConnected / deviceDisconnected to keep controls and icon alive.
+        runCatching {
+            findClassOrNull("com.android.bluetooth.le_audio.LeAudioService")?.let { serviceClass ->
+                hookAfter(findMethod(serviceClass.name, "deviceConnected", BluetoothDevice::class.java)) {
+                    val device = args[0] as? BluetoothDevice ?: return@hookAfter
+                    val context = instance as? ContextWrapper ?: return@hookAfter
+                    savedContext = context.applicationContext ?: context
+                    if (!PodController.supports(device)) return@hookAfter
+                    val target = classicCapablePod(context, device) ?: device
+                    Log.i("HyperPods", "LE_AUDIO connected: ${device.address} -> target ${target.address}")
+                    registerNotificationSettingsReceiver(context)
+                    registerBluetoothStateReceiver(context)
+                    showHeadsetIcon(context)
+                    val mainHandler = Handler(android.os.Looper.getMainLooper())
+                    listOf(400L, 700L, 1200L).forEach { delay ->
+                        mainHandler.postDelayed({
+                            if (hasAnyConnectedProfile(context, device)) {
+                                showHeadsetIcon(context)
+                            }
+                        }, delay)
+                    }
+                    PodController.connectPod(context, target, prefs)
+                }
+                hookAfter(findMethod(serviceClass.name, "deviceDisconnected", BluetoothDevice::class.java, Boolean::class.javaPrimitiveType!!)) {
+                    val device = args[0] as? BluetoothDevice ?: return@hookAfter
+                    val context = instance as? ContextWrapper ?: return@hookAfter
+                    if (!hasAnyConnectedProfile(context, device)) {
+                        updateHeadsetIcon(context)
+                        PodController.disconnectedPod(context, device)
+                    } else {
+                        Log.d("HyperPods", "LE_AUDIO disconnected but other profiles remain for ${device.address}")
+                    }
+                }
+                Log.d("HyperPods", "hooked LeAudioService deviceConnected/deviceDisconnected for LC3 support")
+            }
+        }.onFailure { Log.w("HyperPods", "hook LeAudioService skipped", it) }
+
         hookAfter(findMethodByParamCount("com.android.bluetooth.a2dp.A2dpService", "handleConnectionStateChanged", 3)) {
             val currState = args[2] as Int
             val fromState = args[1] as Int
@@ -195,6 +234,7 @@ object HeadsetStateDispatcher : HookContext() {
         val connected = buildList {
             addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
             addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.LE_AUDIO) }.getOrDefault(emptyList()))
         }.distinctBy { it.address }
         for (device in connected) {
             if (!PodController.supports(device)) continue
@@ -216,9 +256,19 @@ object HeadsetStateDispatcher : HookContext() {
         val connected = buildList {
             addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
             addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.LE_AUDIO) }.getOrDefault(emptyList()))
         }.any { it.address == address }
         Log.d("HyperPods", "hasAnyConnectedProfile addr=$address connected=$connected")
         return connected
+    }
+
+
+    @SuppressLint("MissingPermission")
+    private fun classicCapablePod(context: Context, device: BluetoothDevice): BluetoothDevice? {
+        if (PodController.supports(device) && device.type != BluetoothDevice.DEVICE_TYPE_LE) return device
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return null
+        val bonded = runCatching { adapter.bondedDevices }.getOrNull() ?: return null
+        return bonded.firstOrNull { PodController.supports(it) && it.type != BluetoothDevice.DEVICE_TYPE_LE }
     }
 
     private fun showHeadsetIcon(context: Context) {
@@ -235,6 +285,7 @@ object HeadsetStateDispatcher : HookContext() {
         val connected = buildList {
             addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
             addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
+            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.LE_AUDIO) }.getOrDefault(emptyList()))
         }.distinctBy { it.address }.any { PodController.supports(it) }
         runCatching {
             val statusBarManager = context.getSystemService("statusbar") as StatusBarManager

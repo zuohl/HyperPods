@@ -273,8 +273,15 @@ fun AdvancedSettingsPage(
     onCustomButtonFunctionChange: (CustomButtonFunction) -> Unit = {},
     customButtonPosition: MutableState<CustomButtonPosition> =
         mutableStateOf(CustomButtonPosition.UPPER),
-    onCustomButtonPositionChange: (CustomButtonPosition) -> Unit = {}
+    onCustomButtonPositionChange: (CustomButtonPosition) -> Unit = {},
+    settingsPageStyle: MutableState<Int> =
+        mutableStateOf(io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE),
+    onSettingsPageStyleChange: (Int) -> Unit = {}
 ) {
+    val settingsPageStyleOptions = listOf(
+        stringResource(R.string.settings_page_style_native),
+        stringResource(R.string.settings_page_style_classic)
+    )
     val rfcommConnectionOptions = listOf(
         stringResource(R.string.rfcomm_connection_method_uuid),
         stringResource(R.string.rfcomm_connection_method_channel)
@@ -336,6 +343,15 @@ fun AdvancedSettingsPage(
                     selectedIndex = CustomButtonPosition.selectedIndexOf(customButtonPosition.value),
                     onSelectedIndexChange = {
                         onCustomButtonPositionChange(CustomButtonPosition.fromSelectedIndex(it))
+                    }
+                )
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.settings_page_style),
+                    summary = stringResource(R.string.settings_page_style_summary),
+                    items = settingsPageStyleOptions,
+                    selectedIndex = settingsPageStyle.value.coerceIn(0, 1),
+                    onSelectedIndexChange = {
+                        onSettingsPageStyleChange(it)
                     }
                 )
                 OverlayDropdownPreference(

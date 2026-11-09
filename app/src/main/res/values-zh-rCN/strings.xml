@@ -58,6 +58,10 @@
     <string name="custom_button_position">自定义按钮位置</string>
     <string name="custom_button_position_upper">上方（查找耳机卡）</string>
     <string name="custom_button_position_lower">下方（空间音频卡）</string>
+    <string name="settings_page_style">蓝牙设置页风格</string>
+    <string name="settings_page_style_summary">选择系统蓝牙详情页展示方式</string>
+    <string name="settings_page_style_native">原生数据驱动页 (推荐)</string>
+    <string name="settings_page_style_classic">经典小米专属页</string>
     <string name="device_profiles">设备配置</string>
     <string name="profiles_mode">配置来源</string>
     <string name="profiles_mode_auto">自动识别</string>

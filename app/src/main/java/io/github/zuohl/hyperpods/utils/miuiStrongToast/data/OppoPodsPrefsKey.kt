@@ -30,4 +30,10 @@ object OppoPodsPrefsKey {
     const val DEFAULT_SHOW_CONNECTION_NOTIFICATION = true
     const val DEFAULT_NOTIFICATION_ISLAND_STYLE = false
     const val DEFAULT_MILINK_SPATIAL_AUDIO_OPTION_ENABLED = true
+
+    /** 系统蓝牙设置页样式：0=新版原生数据驱动页 (推荐), 1=经典小米专属页 (MiuiHeadset) */
+    const val SETTINGS_PAGE_STYLE = "settings_page_style"
+    const val SETTINGS_PAGE_STYLE_NATIVE = 0
+    const val SETTINGS_PAGE_STYLE_CLASSIC = 1
+    const val DEFAULT_SETTINGS_PAGE_STYLE = SETTINGS_PAGE_STYLE_NATIVE
 }

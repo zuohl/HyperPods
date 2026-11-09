@@ -8,6 +8,7 @@ import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
 import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey
 
 class HookEntry : XposedModule() {
     private var activeHook: HookContext? = null
@@ -47,7 +48,18 @@ class HookEntry : XposedModule() {
             "com.android.bluetooth" -> HeadsetStateDispatcher
             "com.milink.service" -> MiLinkServiceHook
             "com.xiaomi.bluetooth" -> MiBluetoothToastHook
-            "com.android.settings" -> SettingsHeadsetHook
+            "com.android.settings" -> {
+                val p = getRemotePreferences("oppopods_settings")
+                val style = p.getInt(
+                    OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
+                    OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
+                )
+                if (style == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_CLASSIC) {
+                    SettingsHeadsetHook
+                } else {
+                    SettingsDetailsHook
+                }
+            }
             else -> return
         }
         loadHook(hook, classLoader)

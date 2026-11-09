@@ -143,9 +143,23 @@ private fun openNativeHeadsetSettings(context: Context, deviceName: String) {
 private fun launchSystemHeadsetPage(context: Context) {
     val device = connectedSupportedDevice(context) ?: return
     val intent = Intent().apply {
-        setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-        putExtra("android.bluetooth.device.extra.DEVICE", device)
-        putExtra("bluetoothaddress", runCatching { device.address }.getOrNull())
+        val prefs = context.getSharedPreferences("oppopods_settings", Context.MODE_PRIVATE)
+        val pageStyle = prefs.getInt(
+            OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
+            OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
+        )
+        if (pageStyle == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_CLASSIC) {
+            setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
+            putExtra("android.bluetooth.device.extra.DEVICE", device)
+            putExtra("bluetoothaddress", runCatching { device.address }.getOrNull())
+        } else {
+            setClassName("com.android.settings", "com.android.settings.SubSettings")
+            putExtra(":settings:show_fragment", "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment")
+            val bundle = android.os.Bundle().apply {
+                putParcelable("device", device)
+            }
+            putExtra(":settings:show_fragment_args", bundle)
+        }
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     if (context.packageManager.resolveActivity(intent, 0) == null) {
@@ -211,6 +225,14 @@ fun MainUI(
         mutableStateOf(
             CustomButtonPosition.fromPreference(
                 prefs.getString(CustomButtonPosition.PREF_KEY, null)
+            )
+        )
+    }
+    val settingsPageStyle = remember {
+        mutableStateOf(
+            prefs.getInt(
+                OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
+                OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
             )
         )
     }
@@ -1129,6 +1151,13 @@ fun MainUI(
                             .putString(CustomButtonFunction.PREF_KEY, it.preferenceValue)
                             .commit()
                         broadcastCustomButtonFunction(it.preferenceValue)
+                    },
+                    settingsPageStyle = settingsPageStyle,
+                    onSettingsPageStyleChange = {
+                        settingsPageStyle.value = it
+                        prefs.edit()
+                            .putInt(OppoPodsPrefsKey.SETTINGS_PAGE_STYLE, it)
+                            .commit()
                     },
                     customButtonPosition = customButtonPosition,
                     onCustomButtonPositionChange = {
