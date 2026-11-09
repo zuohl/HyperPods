@@ -88,38 +88,44 @@ object SettingsHeadsetHook : HookContext() {
                 registerStatusReceiver(activity)
                 val intent = callMethod(instance, "getIntent") as? Intent ?: return@hookBefore
                 val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
+                    ?: intent.getStringExtra("bluetoothaddress")?.let { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(it) }
                 Log.d(TAG, "Activity.onCreate before device=${device.describe()} support=${intent.getStringExtra("MIUI_HEADSET_SUPPORT")} comeFrom=${intent.getStringExtra("COME_FROM")} btAddress=${intent.getStringExtra("bluetoothaddress")} known=$knownPodAddresses current=$currentAddress")
                 val isPod = isSupportedPod(device) || (device != null && isKnownPodAddress(device.address))
                 if (!isPod) return@hookBefore
+
+                intent.putExtra("MIUI_HEADSET_SUPPORT", fakeSupport)
+                intent.putExtra("COME_FROM", intent.getStringExtra("COME_FROM") ?: "MIUI_BLUETOOTH_SETTINGS")
+                intent.putExtra("DEVICE_ID", fakeDeviceId)
+                Log.d(TAG, "MiuiHeadsetActivity intent patched address=${device?.address}")
+            }
+            hookAfter(findMethod("com.android.settings.bluetooth.MiuiHeadsetActivity", "onCreate", Bundle::class.java)) {
+                val act = instance as? Activity ?: return@hookAfter
+                val intent = act.intent ?: return@hookAfter
+                val device = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
+                    ?: intent.getStringExtra("bluetoothaddress")?.let { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(it) }
+                    ?: currentAddress?.let { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(it) }
+                val isPod = isSupportedPod(device) || (device != null && isKnownPodAddress(device.address))
+                if (!isPod) return@hookAfter
 
                 val pageStyle = prefs?.getInt(
                     OppoPodsPrefsKey.SETTINGS_PAGE_STYLE,
                     OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
                 ) ?: OppoPodsPrefsKey.DEFAULT_SETTINGS_PAGE_STYLE
-                if (pageStyle == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_NATIVE) {
-                    val act = instance as? Activity
-                    val targetDev = device ?: currentAddress?.let { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(it) }
-                    if (act != null && targetDev != null) {
-                        Log.i(TAG, "Redirecting MiuiHeadsetActivity to native BluetoothDeviceDetailsFragment")
-                        val targetIntent = Intent().apply {
-                            setClassName("com.android.settings", "com.android.settings.SubSettings")
-                            putExtra(":settings:show_fragment", "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment")
-                            val bundle = Bundle().apply {
-                                putParcelable("device", targetDev)
-                            }
-                            putExtra(":settings:show_fragment_args", bundle)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                if (pageStyle == OppoPodsPrefsKey.SETTINGS_PAGE_STYLE_NATIVE && device != null) {
+                    Log.i(TAG, "Redirecting MiuiHeadsetActivity to native BluetoothDeviceDetailsFragment after onCreate")
+                    val targetIntent = Intent().apply {
+                        setClassName("com.android.settings", "com.android.settings.SubSettings")
+                        putExtra(":settings:show_fragment", "com.android.settings.bluetooth.BluetoothDeviceDetailsFragment")
+                        val bundle = Bundle().apply {
+                            putParcelable("device", device)
                         }
-                        act.startActivity(targetIntent)
-                        act.finish()
-                        result = null
-                        return@hookBefore
+                        putExtra(":settings:show_fragment_args", bundle)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
+                    act.startActivity(targetIntent)
+                    act.finish()
                 }
-                intent.putExtra("MIUI_HEADSET_SUPPORT", fakeSupport)
-                intent.putExtra("COME_FROM", intent.getStringExtra("COME_FROM") ?: "MIUI_BLUETOOTH_SETTINGS")
-                intent.putExtra("DEVICE_ID", fakeDeviceId)
-                Log.d(TAG, "MiuiHeadsetActivity intent patched address=${device?.address}")
             }
             hookActivityStringGetter("getDeviceID") { fakeDeviceId }
             hookActivityStringGetter("getSupport") { fakeSupport }

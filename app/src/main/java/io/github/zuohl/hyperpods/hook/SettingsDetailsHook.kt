@@ -86,12 +86,12 @@ object SettingsDetailsHook : HookContext() {
     // -----------------------------------------------------------------------------------------
     private fun hookAdvancedHeaderGate() {
         runCatching {
-            // BluetoothUtils.isAdvancedDetailsHeader(BluetoothDevice): int -> 0 表示开启高级头部
+            // BluetoothUtils.isAdvancedDetailsHeader(BluetoothDevice): boolean -> true 表示开启高级头部
             hookAfter(findMethod("com.android.settingslib.bluetooth.BluetoothUtils", "isAdvancedDetailsHeader", BluetoothDevice::class.java)) {
                 val device = args[0] as? BluetoothDevice
                 if (isSupportedPod(device)) {
                     Log.d(TAG, "isAdvancedDetailsHeader forced 0 for device=${device?.address}")
-                    result = 0
+                    result = true
                 }
             }
         }.onFailure { Log.w(TAG, "hook isAdvancedDetailsHeader skipped", it) }
