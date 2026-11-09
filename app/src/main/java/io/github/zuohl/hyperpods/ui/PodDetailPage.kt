@@ -54,10 +54,12 @@ fun PodDetailPage(
     noiseLevel: Int = NoiseLevel.DEEP,
     smartAncLevel: Int = -1,
     onNoiseLevelChange: (Int) -> Unit = {},
+    onFindDevice: ((left: Boolean, right: Boolean) -> Unit)? = null,
     homeImageFile: java.io.File? = null,
     onOpenMoreSettings: () -> Unit = {},
     onOpenSystemSettings: (() -> Unit)? = null
 ) {
+    val showFindDialog = remember { androidx.compose.runtime.mutableStateOf(false) }
     val smartLevelName = if (noiseLevel == NoiseLevel.SMART) {
         when (smartAncLevel) {
             NoiseLevel.LIGHT -> stringResource(R.string.noise_level_light)
@@ -200,6 +202,20 @@ fun PodDetailPage(
             }
         }
 
+        if (onFindDevice != null) {
+            item {
+                Card(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                ) {
+                    ArrowPreference(
+                        title = stringResource(R.string.find_earphones),
+                        summary = stringResource(R.string.find_earphones_summary),
+                        onClick = { showFindDialog.value = true }
+                    )
+                }
+            }
+        }
+
         if (onOpenSystemSettings != null) {
             item {
                 Card(
@@ -221,6 +237,54 @@ fun PodDetailPage(
                 ArrowPreference(
                     title = stringResource(R.string.more_settings),
                     onClick = onOpenMoreSettings
+                )
+            }
+        }
+    }
+
+    if (onFindDevice != null) {
+        top.yukonga.miuix.kmp.overlay.OverlayDialog(
+            title = stringResource(R.string.find_earphones),
+            show = showFindDialog.value,
+            onDismissRequest = { showFindDialog.value = false }
+        ) {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.find_earphones_summary),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    fontSize = MiuixTheme.textStyles.body2.fontSize,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = { onFindDevice(true, true) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = stringResource(R.string.find_earphones_both))
+                }
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    top.yukonga.miuix.kmp.basic.Button(
+                        onClick = { onFindDevice(true, false) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(text = stringResource(R.string.find_earphones_left))
+                    }
+                    top.yukonga.miuix.kmp.basic.Button(
+                        onClick = { onFindDevice(false, true) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(text = stringResource(R.string.find_earphones_right))
+                    }
+                }
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    text = stringResource(R.string.find_earphones_stop),
+                    onClick = { onFindDevice(false, false) },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

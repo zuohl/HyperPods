@@ -64,7 +64,7 @@ object VivoProtocol {
 
     fun queryBattery(): ByteArray = frame(version = 4, vendor = VIVO_VENDOR, command = QUERY_BATTERY)
 
-    fun queryNoiseMode(): ByteArray = frame(version = FAMILY_GAIA_VERSION, vendor = VIVO_VENDOR, command = QUERY_NOISE_MODE)
+    fun queryNoiseMode(): ByteArray = frame(version = AIR3_GAIA_VERSION, vendor = VIVO_VENDOR, command = QUERY_NOISE_MODE)
 
     fun setNoiseMode(mode: Int): ByteArray = frame(
         version = AIR3_GAIA_VERSION,

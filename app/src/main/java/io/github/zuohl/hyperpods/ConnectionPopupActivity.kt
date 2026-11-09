@@ -95,15 +95,13 @@ class ConnectionPopupActivity : ComponentActivity() {
         ).takeIf { it in OppoPodsPrefsKey.CONNECTION_POPUP_DISMISS_SECOND_OPTIONS }
             ?: OppoPodsPrefsKey.DEFAULT_CONNECTION_POPUP_DISMISS_SECONDS
 
-        val connectVideoFile = PodImageStore.customFile(this, PodImageSlot.CONNECT_VIDEO)
-
         setContent {
             AppTheme(colorSchemeMode = colorSchemeMode) {
                 ConnectionPopupContent(
                     initialDeviceName = initialDeviceName,
                     initialBatteryParams = initialBatteryParams,
                     autoDismissSeconds = autoDismissSeconds,
-                    videoFile = connectVideoFile,
+                    videoFile = null,
                     onDismiss = { finish() }
                 )
             }

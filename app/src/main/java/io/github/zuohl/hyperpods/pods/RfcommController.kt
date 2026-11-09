@@ -501,7 +501,9 @@ object RfcommController {
                 MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(
                     context,
                     batteryParams,
-                    notificationSettings
+                    notificationSettings,
+                    mDevice.name,
+                    mDevice.address
                 )
             }
             if (showConnectionPopupEnabled) {

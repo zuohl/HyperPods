@@ -21,10 +21,14 @@ object PodDetector {
     )
 
     private val vivoNameKeywords = listOf(
-        "vivo tws",
-        "vivo tq",
-        "iqoo tws",
-        "iqoo tq",
+        "vivo",
+        "iqoo",
+        "tws air",
+        "air3",
+        "air 3",
+        "tws 3",
+        "tws 4",
+        "tws 2",
     )
 
     @SuppressLint("MissingPermission")

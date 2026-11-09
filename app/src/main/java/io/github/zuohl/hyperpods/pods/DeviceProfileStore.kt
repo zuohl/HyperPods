@@ -120,6 +120,21 @@ object DeviceProfileStore {
         prefs: SharedPreferences,
         deviceName: String? = null,
     ): DeviceProfile {
+        if (PodDetector.brandByName(deviceName) == PodBrand.VIVO) {
+            return DeviceProfile(
+                id = "vivo_tws",
+                name = deviceName ?: "vivo TWS",
+                adaptiveVisible = false,
+                gameModeVisible = false,
+                noiseLevelVisible = false,
+                customEqVisible = false,
+                spatialAudioVisible = false,
+                spatialSoundVisible = false,
+                autoPlayPauseVisible = false,
+                dualDeviceVisible = false,
+                connectedDevicesVisible = false,
+            )
+        }
         val caps = when (profileMode(prefs)) {
             ProfileMode.MODEL -> selectedModelId(prefs)
                 ?.let { DeviceModelRegistry.byProductId(context, it) }

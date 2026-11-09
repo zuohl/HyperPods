@@ -26,6 +26,7 @@ object HeadsetStateDispatcher : HookContext() {
     private var notificationSettingsContext: Context? = null
     private var notificationSettingsReceiver: BroadcastReceiver? = null
     private var bluetoothStateReceiverRegistered = false
+    private var savedContext: Context? = null
     private val knownPodAddresses = linkedSetOf<String>()
     private val hookedBinderClasses = linkedSetOf<String>()
     private val syncHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -48,6 +49,7 @@ object HeadsetStateDispatcher : HookContext() {
                 val supported = device != null && PodController.supports(device)
                 Log.d("HyperPods", "A2DP Connection State: $currState, supported=$supported brand=${device?.let { PodDetector.detectBrand(it) }}")
                 val context = instance as ContextWrapper
+                savedContext = context.applicationContext ?: context
                 registerNotificationSettingsReceiver(context)
                 registerBluetoothStateReceiver(context)
                 if (!supported) return@post
@@ -56,6 +58,14 @@ object HeadsetStateDispatcher : HookContext() {
                     // Show directly: getConnectedDevices() lags a beat after the CONNECTED
                     // event, so deriving the icon here races and hides it again.
                     showHeadsetIcon(context)
+                    val mainHandler = Handler(android.os.Looper.getMainLooper())
+                    listOf(400L, 700L, 1200L).forEach { delay ->
+                        mainHandler.postDelayed({
+                            if (hasAnyConnectedProfile(context, device)) {
+                                showHeadsetIcon(context)
+                            }
+                        }, delay)
+                    }
                     PodController.connectPod(context, device, prefs)
                 } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
                     // Re-evaluate: hide only when no supported pod remains in any profile,
@@ -264,8 +274,6 @@ object HeadsetStateDispatcher : HookContext() {
         }
     }
 
-    private fun findClassOrNull(className: String): Class<*>? =
-        runCatching { findClass(className) }.getOrNull()
 
     private fun installHeadsetBinderHooks(binderClass: Class<*>) {
         val className = binderClass.name
@@ -285,25 +293,53 @@ object HeadsetStateDispatcher : HookContext() {
         hookAddressStringResult(className, listOf("isSupportAudioSwitch", "mo19775z1", "z1"), "isSupportAudioSwitch") { "1" }
         hookAddressBooleanResult(className, listOf("isMiTWS", "mo19771O0", "O0"), "isMiTWS", true)
         hookAddressBooleanResult(className, listOf("checkIsMiTWS", "mo19766B", "B"), "checkIsMiTWS", true)
-        hookAddressBooleanResult(className, listOf("getRingFindState", "mo19772m0", "m0"), "getRingFindState", false)
+        hookAddressBooleanResult(className, listOf("getRingFindState", "mo19772m0", "m0"), "getRingFindState", true)
 
         runCatching {
             hookBefore(findMethod(className, "setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java)) {
                 val command = args[0] as? Int
+                val params = args[1] as? String
                 val device = args[2] as? BluetoothDevice
                 if (!isSupportedPod(device)) return@hookBefore
-                result = when (command) {
-                    102 -> "0"
-                    123 -> "4"
-                    else -> "1"
+                val ctx = savedContext
+                when (command) {
+                    102 -> {
+                        if (ctx != null) sendFindDeviceBroadcast(ctx, device, left = false, right = false)
+                        result = "0"
+                    }
+                    103 -> {
+                        if (ctx != null) sendFindDeviceBroadcast(ctx, device, left = true, right = false)
+                        result = "0"
+                    }
+                    104 -> {
+                        if (ctx != null) sendFindDeviceBroadcast(ctx, device, left = false, right = true)
+                        result = "0"
+                    }
+                    105 -> {
+                        if (ctx != null) sendFindDeviceBroadcast(ctx, device, left = true, right = true)
+                        result = "0"
+                    }
+                    123 -> result = "4"
+                    else -> result = "1"
                 }
-                Log.d("HyperPods", "setCommonCommand forced command=$command device=${device?.address} result=$result")
+                Log.d("HyperPods", "setCommonCommand forced command=$command params=$params device=${device?.address} result=$result")
             }
         }.onFailure { Log.w("HyperPods", "hook setCommonCommand skipped", it) }
 
         hookBinderVoidDevice(className, "connect")
         hookBinderVoidDevice(className, "getDeviceConfig")
         hookBinderVoidDeviceString(className, "getCommonConfig")
+    }
+
+    private fun sendFindDeviceBroadcast(context: Context, device: BluetoothDevice?, left: Boolean, right: Boolean) {
+        val intent = Intent(io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction.ACTION_QCY_FIND_DEVICE_SET).apply {
+            putExtra("left", left)
+            putExtra("right", right)
+            device?.address?.let { putExtra("address", it) }
+            setPackage("com.android.bluetooth")
+        }
+        context.sendBroadcast(intent)
+        Log.d("HyperPods", "sendFindDeviceBroadcast device=${device?.address} left=$left right=$right")
     }
 
     private fun hookBinderVoidDevice(className: String, methodName: String) {

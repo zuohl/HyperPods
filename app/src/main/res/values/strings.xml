@@ -47,6 +47,13 @@
     <string name="custom_button_function_game_mode">Game mode</string>
     <string name="custom_button_function_adaptive">Enable adaptive mode</string>
     <string name="custom_button_function_spatial_sound">Spatial sound</string>
+    <string name="custom_button_function_find_device">Find earbuds</string>
+    <string name="find_earphones">Find Earbuds</string>
+    <string name="find_earphones_summary">Play a sound to help locate earbuds</string>
+    <string name="find_earphones_left">Ring Left</string>
+    <string name="find_earphones_right">Ring Right</string>
+    <string name="find_earphones_both">Ring Both</string>
+    <string name="find_earphones_stop">Stop Ringing</string>
     <string name="custom_button_position">Custom button position</string>
     <string name="custom_button_position_upper">Upper (Find earbuds card)</string>
     <string name="custom_button_position_lower">Lower (Spatial audio card)</string>

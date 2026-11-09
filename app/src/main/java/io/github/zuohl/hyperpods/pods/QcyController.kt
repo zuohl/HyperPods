@@ -89,6 +89,11 @@ object QcyController {
     private var currentCustomEqGains: IntArray = IntArray(QcyOfficialEqCurves.customFrequencies.size)
     private var lastWrittenEqPreset: Int? = null
     private var lastWrittenCustomEqGains: IntArray? = null
+    private val currentKeyMappings = mutableMapOf<Pair<Int, Int>, Int>()
+    private var currentFindDeviceEar: Int = QcyEar.NONE
+    private var currentFirmwareInfo: QcyFirmwareInfo? = null
+    private var currentVoiceLanguageIsEnglish: Boolean = false
+    private var currentAutoPowerOffMinutes: Int = 0
     private var regularBatteryLevelUnsupported = false
     private var currentTransparencyVocalEnhancement: Boolean = false
     private var currentAddress: String? = null
@@ -178,6 +183,28 @@ object QcyController {
                 }
                 OppoPodsAction.ACTION_CUSTOM_EQ_SET -> {
                     setCustomEq(intent.getIntArrayExtra("gains") ?: currentCustomEqGains)
+                }
+                OppoPodsAction.ACTION_QCY_KEY_SET -> {
+                    val action = intent.getIntExtra("action", QcyKeyAction.DOUBLE_CLICK)
+                    val ear = intent.getIntExtra("ear", QcyEar.LEFT)
+                    val function = intent.getIntExtra("function", QcyKeyFunction.PLAY_PAUSE)
+                    setKeyFunction(action, ear, function)
+                }
+                OppoPodsAction.ACTION_QCY_FIND_DEVICE_SET -> {
+                    val left = intent.getBooleanExtra("left", false)
+                    val right = intent.getBooleanExtra("right", false)
+                    setFindDevice(left, right)
+                }
+                OppoPodsAction.ACTION_QCY_LANGUAGE_SET -> {
+                    val isEnglish = intent.getBooleanExtra("is_english", false)
+                    setVoiceLanguage(isEnglish)
+                }
+                OppoPodsAction.ACTION_QCY_AUTO_POWER_OFF_SET -> {
+                    val minutes = intent.getIntExtra("minutes", 0)
+                    setAutoPowerOff(minutes)
+                }
+                OppoPodsAction.ACTION_QCY_FACTORY_RESET -> {
+                    factoryReset()
                 }
             }
         }
@@ -329,6 +356,11 @@ object QcyController {
         currentCustomEqGains = IntArray(QcyOfficialEqCurves.customFrequencies.size)
         lastWrittenEqPreset = null
         lastWrittenCustomEqGains = null
+        currentKeyMappings.clear()
+        currentFindDeviceEar = QcyEar.NONE
+        currentFirmwareInfo = null
+        currentVoiceLanguageIsEnglish = false
+        currentAutoPowerOffMinutes = 0
         currentTransparencyVocalEnhancement = false
         reconnectAttempts = 0
         reconnectPending = false
@@ -355,8 +387,49 @@ object QcyController {
         sendCommand(QcyPacketBuilder.request(QcyCmd.DYNAMIC_EQ))
         sendCommand(QcyPacketBuilder.request(QcyCmd.SLEEP_MODE))
         sendCommand(QcyPacketBuilder.request(QcyCmd.ADAPTIVE_VOLUME))
+        QcyKeyAction.ALL.forEach { action ->
+            sendCommand(QcyPacketBuilder.request(action))
+        }
+        sendCommand(QcyPacketBuilder.request(QcyCmd.FIRMWARE_INFO))
+        sendCommand(QcyPacketBuilder.request(QcyCmd.FIND_DEVICE))
+        sendCommand(QcyPacketBuilder.request(QcyCmd.VOICE_LANGUAGE))
+        sendCommand(QcyPacketBuilder.request(QcyCmd.AUTO_POWER_OFF))
         restoreSavedEqStateForUi()
         sendCommand(QcyPacketBuilder.request(QcyCmd.EQ_PARAMS_V2))
+    }
+
+    fun setKeyFunction(action: Int, ear: Int, function: Int) {
+        currentKeyMappings[Pair(action, ear)] = function
+        changeUIKeyMapping(action, ear, function)
+        sendCommand(QcyPacketBuilder.keyFunction(action, ear, function))
+    }
+
+    fun setFindDevice(left: Boolean, right: Boolean) {
+        val ear = when {
+            left && right -> QcyEar.BOTH
+            left -> QcyEar.LEFT
+            right -> QcyEar.RIGHT
+            else -> QcyEar.NONE
+        }
+        currentFindDeviceEar = ear
+        changeUIFindDevice(ear)
+        sendCommand(QcyPacketBuilder.findDevice(left, right))
+    }
+
+    fun setVoiceLanguage(isEnglish: Boolean) {
+        currentVoiceLanguageIsEnglish = isEnglish
+        changeUIVoiceLanguage(isEnglish)
+        sendCommand(QcyPacketBuilder.voiceLanguage(isEnglish))
+    }
+
+    fun setAutoPowerOff(minutes: Int) {
+        currentAutoPowerOffMinutes = minutes
+        changeUIAutoPowerOff(minutes)
+        sendCommand(QcyPacketBuilder.autoPowerOff(minutes))
+    }
+
+    fun factoryReset() {
+        sendCommand(QcyPacketBuilder.factoryReset())
     }
 
     fun setGameMode(enabled: Boolean) {
@@ -607,6 +680,39 @@ object QcyController {
                         changeUIEqPreset(it)
                     }
                 }
+                QcyCmd.KEY_SINGLE,
+                QcyCmd.KEY_DOUBLE,
+                QcyCmd.KEY_TRIPLE,
+                QcyCmd.KEY_LONG -> {
+                    QcyPacketParser.parseKeyMapping(event.cmd, event.params)?.let { mapping ->
+                        currentKeyMappings[Pair(mapping.action, mapping.ear)] = mapping.function
+                        changeUIKeyMapping(mapping.action, mapping.ear, mapping.function)
+                    }
+                }
+                QcyCmd.FIRMWARE_INFO -> {
+                    QcyPacketParser.parseFirmwareInfo(event.params)?.let {
+                        currentFirmwareInfo = it
+                        changeUIFirmwareInfo(it)
+                    }
+                }
+                QcyCmd.FIND_DEVICE -> {
+                    QcyPacketParser.parseFindDevice(event.params)?.let {
+                        currentFindDeviceEar = it
+                        changeUIFindDevice(it)
+                    }
+                }
+                QcyCmd.VOICE_LANGUAGE -> {
+                    QcyPacketParser.parseVoiceLanguage(event.params)?.let {
+                        currentVoiceLanguageIsEnglish = it
+                        changeUIVoiceLanguage(it)
+                    }
+                }
+                QcyCmd.AUTO_POWER_OFF -> {
+                    QcyPacketParser.parseAutoPowerOff(event.params)?.let {
+                        currentAutoPowerOffMinutes = it
+                        changeUIAutoPowerOff(it)
+                    }
+                }
             }
         }
     }
@@ -628,7 +734,7 @@ object QcyController {
             val device = classicDevice
             if (ctx != null && device != null) {
                 val notificationSettings = prefs?.let { NotificationSettings.fromPrefs(it) } ?: NotificationSettings()
-                PodBroadcaster.showConnectionSuperIsland(ctx, batteryParams, notificationSettings)
+                PodBroadcaster.showConnectionSuperIsland(ctx, batteryParams, notificationSettings, currentDeviceName, currentAddress)
             }
         }
         classicDevice?.let { device ->
@@ -722,6 +828,13 @@ object QcyController {
         changeUIAdaptiveVolumeStatus(currentAdaptiveVolume)
         changeUIEqPreset(currentEqPreset)
         changeUICustomEqGains(currentCustomEqGains)
+        currentKeyMappings.forEach { (key, func) ->
+            changeUIKeyMapping(key.first, key.second, func)
+        }
+        currentFirmwareInfo?.let(::changeUIFirmwareInfo)
+        changeUIFindDevice(currentFindDeviceEar)
+        changeUIVoiceLanguage(currentVoiceLanguageIsEnglish)
+        changeUIAutoPowerOff(currentAutoPowerOffMinutes)
     }
 
     private fun changeUIConnectionState(state: String) {
@@ -797,6 +910,39 @@ object QcyController {
         }
     }
 
+    private fun changeUIKeyMapping(action: Int, ear: Int, function: Int) {
+        sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_QCY_KEY_CHANGED) {
+            putExtra("action", action)
+            putExtra("ear", ear)
+            putExtra("function", function)
+        }
+    }
+
+    private fun changeUIFirmwareInfo(info: QcyFirmwareInfo) {
+        sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_QCY_FIRMWARE_INFO_CHANGED) {
+            putExtra("version", info.version)
+            putExtra("raw_model", info.rawModel)
+        }
+    }
+
+    private fun changeUIFindDevice(ear: Int) {
+        sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_QCY_FIND_DEVICE_CHANGED) {
+            putExtra("ear", ear)
+        }
+    }
+
+    private fun changeUIVoiceLanguage(isEnglish: Boolean) {
+        sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_QCY_LANGUAGE_CHANGED) {
+            putExtra("is_english", isEnglish)
+        }
+    }
+
+    private fun changeUIAutoPowerOff(minutes: Int) {
+        sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_QCY_AUTO_POWER_OFF_CHANGED) {
+            putExtra("minutes", minutes)
+        }
+    }
+
     private fun sendAppStatusBroadcast(action: String, force: Boolean = false, fill: Intent.() -> Unit = {}) {
         val ctx = context ?: return
         if (!force && !isAppUiActive()) return
@@ -821,6 +967,11 @@ object QcyController {
                 addAction(OppoPodsAction.ACTION_ADAPTIVE_VOLUME_SET)
                 addAction(OppoPodsAction.ACTION_EQ_PRESET_SET)
                 addAction(OppoPodsAction.ACTION_CUSTOM_EQ_SET)
+                addAction(OppoPodsAction.ACTION_QCY_KEY_SET)
+                addAction(OppoPodsAction.ACTION_QCY_FIND_DEVICE_SET)
+                addAction(OppoPodsAction.ACTION_QCY_LANGUAGE_SET)
+                addAction(OppoPodsAction.ACTION_QCY_AUTO_POWER_OFF_SET)
+                addAction(OppoPodsAction.ACTION_QCY_FACTORY_RESET)
             },
             Context.RECEIVER_EXPORTED
         )

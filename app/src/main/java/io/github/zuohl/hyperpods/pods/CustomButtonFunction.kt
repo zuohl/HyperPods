@@ -6,7 +6,8 @@ enum class CustomButtonFunction(val preferenceValue: String) {
     NONE("none"),
     GAME_MODE("game_mode"),
     ADAPTIVE("adaptive"),
-    SPATIAL_SOUND("spatial_sound");
+    SPATIAL_SOUND("spatial_sound"),
+    FIND_DEVICE("find_device");
 
     companion object {
         const val PREF_KEY = "custom_button_function"

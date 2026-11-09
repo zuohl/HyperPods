@@ -119,12 +119,7 @@ fun ProfilesPage(
 
     fun pick(slot: PodImageSlot) {
         pendingSlot = slot
-        val mimeTypes = if (slot == PodImageSlot.CONNECT_VIDEO) {
-            arrayOf("video/*")
-        } else {
-            arrayOf("image/*")
-        }
-        imagePicker.launch(mimeTypes)
+        imagePicker.launch(arrayOf("image/*"))
     }
 
     LazyColumn(
@@ -201,16 +196,6 @@ fun ProfilesPage(
                     onPick = { pick(PodImageSlot.ISLAND_RIGHT) },
                     onReset = {
                         PodImageStore.clear(context, PodImageSlot.ISLAND_RIGHT)
-                        imageRevision++
-                    },
-                )
-                ImageSlotRow(
-                    titleRes = R.string.pod_image_connect_video,
-                    slot = PodImageSlot.CONNECT_VIDEO,
-                    revision = imageRevision,
-                    onPick = { pick(PodImageSlot.CONNECT_VIDEO) },
-                    onReset = {
-                        PodImageStore.clear(context, PodImageSlot.CONNECT_VIDEO)
                         imageRevision++
                     },
                 )

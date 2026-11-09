@@ -107,8 +107,14 @@ object PodBroadcaster {
     // ------------------------------------------------------------------
 
     /** Battery super island (status-bar overlay), fired on the first battery of a connection. */
-    fun showConnectionSuperIsland(context: Context, battery: BatteryParams, settings: NotificationSettings) {
-        MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(context, battery, settings)
+    fun showConnectionSuperIsland(
+        context: Context,
+        battery: BatteryParams,
+        settings: NotificationSettings,
+        deviceName: String? = null,
+        address: String? = null
+    ) {
+        MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(context, battery, settings, deviceName, address)
     }
 
     /** Persistent connection notification shown while the earphone is connected. */

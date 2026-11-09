@@ -837,6 +837,14 @@ fun MainUI(
                             noiseLevel = displayNoiseLevel,
                             smartAncLevel = displaySmartAncLevel,
                             onNoiseLevelChange = { setNoiseLevel(it) },
+                            onFindDevice = { left, right ->
+                                val intent = Intent(OppoPodsAction.ACTION_QCY_FIND_DEVICE_SET).apply {
+                                    putExtra("left", left)
+                                    putExtra("right", right)
+                                    setPackage("com.android.bluetooth")
+                                }
+                                context.sendBroadcast(intent)
+                            },
                             homeImageFile = PodImageStore.customFile(context, PodImageSlot.HOME_IMAGE),
                             onOpenMoreSettings = { backStack.add(Screen.MoreSettings) },
                             onOpenSystemSettings = { openNativeHeadsetSettings(context, mainTitle.value) }

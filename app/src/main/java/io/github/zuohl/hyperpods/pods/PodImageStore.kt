@@ -16,14 +16,11 @@ enum class PodImageSlot(val key: String, val fileName: String) {
     /** 首页耳机／充电盒图 */
     HOME_IMAGE("home_image", "home_image.bin"),
 
-    /** 连接临时超级岛左耳图 */
+    /** 蓝牙超级岛左耳图 */
     ISLAND_LEFT("island_left", "island_left.bin"),
 
-    /** 连接临时超级岛右耳图 */
-    ISLAND_RIGHT("island_right", "island_right.bin"),
-
-    /** 连接弹窗动画视频 */
-    CONNECT_VIDEO("connect_video", "connect_video.bin");
+    /** 蓝牙超级岛右耳图 */
+    ISLAND_RIGHT("island_right", "island_right.bin");
 
     companion object {
         fun fromKey(key: String?): PodImageSlot? = entries.firstOrNull { it.key == key }
@@ -31,7 +28,7 @@ enum class PodImageSlot(val key: String, val fileName: String) {
         fun fromFileName(name: String?): PodImageSlot? =
             entries.firstOrNull { it.fileName == name }
 
-        /** 图片类槽位（不含视频），用于设置页的图片区。 */
+        /** 图片类槽位，用于设置页的图片区。 */
         val IMAGES = listOf(HOME_IMAGE, ISLAND_LEFT, ISLAND_RIGHT)
     }
 }

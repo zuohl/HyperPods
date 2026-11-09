@@ -170,6 +170,22 @@ object MiLinkServiceHook : HookContext() {
         icon = { null },
     )
 
+    private const val FIND_DEVICE_TITLE = "查找耳机"
+    private const val FIND_DEVICE_SUBTITLE_ON = "响铃中"
+    private const val FIND_DEVICE_SUBTITLE_OFF = "已关闭"
+    private var currentFindDeviceActive = false
+
+    private val findDeviceHandler = CustomButtonHandler(
+        isActive = { currentFindDeviceActive },
+        onToggle = { enabled, ctx ->
+            currentFindDeviceActive = enabled
+            sendFindDeviceBroadcast(enabled, enabled, ctx)
+        },
+        title = { FIND_DEVICE_TITLE },
+        subtitle = { active -> if (active) FIND_DEVICE_SUBTITLE_ON else FIND_DEVICE_SUBTITLE_OFF },
+        icon = { null },
+    )
+
     // 返回当前自定义按钮功能对应的 handler；NONE → null（控件隐藏）
     private fun activeHandler(): CustomButtonHandler? {
         loadState()
@@ -177,8 +193,21 @@ object MiLinkServiceHook : HookContext() {
             CustomButtonFunction.GAME_MODE -> gameModeHandler
             CustomButtonFunction.ADAPTIVE -> adaptiveHandler
             CustomButtonFunction.SPATIAL_SOUND -> spatialSoundHandler
+            CustomButtonFunction.FIND_DEVICE -> findDeviceHandler
             CustomButtonFunction.NONE -> null
         }
+    }
+
+    private fun sendFindDeviceBroadcast(left: Boolean, right: Boolean, ctx: Context? = context) {
+        val targetCtx = ctx ?: return
+        val intent = Intent(OppoPodsAction.ACTION_QCY_FIND_DEVICE_SET).apply {
+            putExtra("left", left)
+            putExtra("right", right)
+            currentAddress?.let { putExtra("address", it) }
+            setPackage("com.android.bluetooth")
+        }
+        targetCtx.sendBroadcast(intent)
+        Log.d(TAG, "sendFindDeviceBroadcast left=$left right=$right")
     }
 
     private fun hookContextEntry() {

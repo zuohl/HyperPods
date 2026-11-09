@@ -26,6 +26,8 @@ import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsAction
 import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.OppoPodsPrefsKey
 import io.github.zuohl.hyperpods.R
+import io.github.zuohl.hyperpods.config.FakeDeviceConfig
+
 
 @SuppressLint("MissingPermission")
 object MiBluetoothToastHook : HookContext() {
@@ -42,6 +44,7 @@ object MiBluetoothToastHook : HookContext() {
     private var localAncMode = 1
     private var notificationReceiver: BroadcastReceiver? = null
     private var notificationReceiverContext: Context? = null
+    private val activePodAddresses = linkedSetOf<String>()
 
     override fun onHook() {
         var notificationSettings = NotificationSettings.fromPrefs(prefs)
@@ -364,109 +367,182 @@ object MiBluetoothToastHook : HookContext() {
         }
 
 
-        hookConstructorAfter(findConstructorByParamCount("com.android.bluetooth.ble.app.MiuiBluetoothNotification", 2)) {
-            val context = getObjectField(instance, "mContext") as Context
-            if (notificationReceiver != null) return@hookConstructorAfter
+        fun setupNotificationReceiver(context: Context) {
+            if (notificationReceiver != null) return
             notificationSettings = loadNotificationSettings(context)
             cacheNotificationSettings(context, notificationSettings)
             if (!notificationSettings.showConnectionNotification) {
                 cancelAllPodsNotifications(context)
             }
 
-                    val broadcastReceiver = object : BroadcastReceiver() {
-                        override fun onReceive(p0: Context?, p1: Intent?) {
-                            if (p1?.action == "chen.action.oppopods.sendstrongtoast") {
-                                val settings = effectiveNotificationSettings(p1, context)
-                                if (!settings.showConnectionBatteryIsland) {
-                                    Log.d("OppoPods", "Temporary battery island suppressed by settings")
-                                    return
-                                }
-                                val batteryParams = p1.getParcelableExtra(
-                                    "batteryParams",
-                                    BatteryParams::class.java
-                                ) ?: return
-                                FocusIslandUtil.showBatteryIsland(
+            val broadcastReceiver = object : BroadcastReceiver() {
+                override fun onReceive(p0: Context?, p1: Intent?) {
+                    val action = p1?.action ?: return
+                    when (action) {
+                        "chen.action.oppopods.sendstrongtoast" -> {
+                            val address = p1.getStringExtra("address")
+                            if (!address.isNullOrBlank()) activePodAddresses.add(address.uppercase())
+                            val settings = effectiveNotificationSettings(p1, context)
+                            if (!settings.showConnectionBatteryIsland) {
+                                Log.d("OppoPods", "Temporary battery island suppressed by settings")
+                                return
+                            }
+                            val batteryParams = p1.getParcelableExtra("batteryParams", BatteryParams::class.java) ?: return
+                            val deviceName = p1.getStringExtra("device_name")
+                            FocusIslandUtil.showBatteryIsland(context, batteryParams, deviceName, address)
+                        }
+                        "chen.action.oppopods.updatepodsnotification" -> {
+                            val batteryParams = p1.getParcelableExtra("batteryParams", BatteryParams::class.java)
+                            val device = p1.getParcelableExtra("device", BluetoothDevice::class.java)
+                            device?.address?.let { activePodAddresses.add(it.uppercase()) }
+                            val settings = effectiveNotificationSettings(p1, context)
+                            if (settings.showConnectionNotification && batteryParams != null) {
+                                createPodsNotification(
+                                    device,
                                     context,
-                                    batteryParams
+                                    batteryParams,
+                                    settings.showNotificationAsIsland,
+                                    p1.getBooleanExtra(OppoPodsAction.EXTRA_RFCOMM_CONNECTED, true)
                                 )
-                            } else if (p1?.action == "chen.action.oppopods.updatepodsnotification") {
-                                val batteryParams = p1.getParcelableExtra("batteryParams", BatteryParams::class.java)
-                                val device = p1.getParcelableExtra("device", BluetoothDevice::class.java)
-                                val settings = effectiveNotificationSettings(p1, context)
-                                if (settings.showConnectionNotification && batteryParams != null) {
-                                    createPodsNotification(
-                                        device,
-                                        context,
-                                        batteryParams,
-                                        settings.showNotificationAsIsland,
-                                        p1.getBooleanExtra(OppoPodsAction.EXTRA_RFCOMM_CONNECTED, true)
-                                    )
-                                } else if (device != null) {
-                                    cancelNotification(device, context)
-                                } else {
-                                    cancelAllPodsNotifications(context)
-                                }
-                            } else if (p1?.action == "chen.action.oppopods.cancelpodsnotification") {
-                                val device = p1.getParcelableExtra(
-                                    "device",
-                                    BluetoothDevice::class.java
-                                ) ?: return
+                            } else if (device != null) {
                                 cancelNotification(device, context)
-                            } else if (p1?.action == OppoPodsAction.ACTION_PODS_ANC_CHANGED) {
-                                // 同步耳机实际 ANC 状态到本地缓存，确保下次循环切换时状态准确
-                                localAncMode = p1.getIntExtra("status", 1)
-                            } else if (p1?.action == OppoPodsAction.ACTION_NOTIFICATION_SETTINGS_CHANGED) {
-                                syncNotificationSettings(context, p1)
-                                val lastDevice = lastNotificationDevice
-                                val lastBatteryParams = lastNotificationBatteryParams
-                                if (!notificationSettings.showConnectionNotification) {
-                                    if (lastDevice != null) {
-                                        cancelNotification(lastDevice, context)
-                                    } else {
-                                        cancelAllPodsNotifications(context)
-                                    }
-                                } else if (lastDevice != null && lastBatteryParams != null) {
-                                    createPodsNotification(
-                                        lastDevice,
-                                        context,
-                                        lastBatteryParams,
-                                        notificationSettings.showNotificationAsIsland,
-                                        lastNotificationRfcommConnected
-                                    )
-                                }
-                            } else if (p1?.action == OppoPodsAction.ACTION_CYCLE_ANC) {
-                                // 循环切换降噪模式：按当前机型的 adaptiveVisible 决定是否经过自适应档。
-                                val profile = runCatching {
-                                    DeviceProfileStore.resolveProfile(context, prefs)
-                                }.getOrNull()
-                                val adaptiveEnabled = profile?.adaptiveVisible == true
-                                localAncMode = when (localAncMode) {
-                                    2 -> if (adaptiveEnabled) 4 else 3  // NC → Adaptive（若启用）或 Transparency
-                                    4 -> 3  // Adaptive → Transparency
-                                    3 -> 1  // Transparency → OFF
-                                    else -> 2  // OFF → NC
-                                }
-                                Intent(OppoPodsAction.ACTION_ANC_SELECT).apply {
-                                    setPackage("com.android.bluetooth")
-                                    putExtra("status", localAncMode)
-                                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                                    p0?.sendBroadcast(this)
-                                }
+                            } else {
+                                cancelAllPodsNotifications(context)
+                            }
+                        }
+                        "chen.action.oppopods.cancelpodsnotification" -> {
+                            val device = p1.getParcelableExtra("device", BluetoothDevice::class.java) ?: return
+                            activePodAddresses.remove(device.address.uppercase())
+                            cancelNotification(device, context)
+                        }
+                        OppoPodsAction.ACTION_PODS_CONNECTED -> {
+                            val address = p1.getStringExtra("address")
+                            if (!address.isNullOrBlank()) activePodAddresses.add(address.uppercase())
+                        }
+                        OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
+                            val address = p1.getStringExtra("address")
+                            if (!address.isNullOrBlank()) activePodAddresses.remove(address.uppercase())
+                        }
+                        OppoPodsAction.ACTION_PODS_ANC_CHANGED -> {
+                            localAncMode = p1.getIntExtra("status", 1)
+                        }
+                        OppoPodsAction.ACTION_NOTIFICATION_SETTINGS_CHANGED -> {
+                            syncNotificationSettings(context, p1)
+                            val lastDevice = lastNotificationDevice
+                            val lastBatteryParams = lastNotificationBatteryParams
+                            if (!notificationSettings.showConnectionNotification) {
+                                if (lastDevice != null) cancelNotification(lastDevice, context) else cancelAllPodsNotifications(context)
+                            } else if (lastDevice != null && lastBatteryParams != null) {
+                                createPodsNotification(
+                                    lastDevice,
+                                    context,
+                                    lastBatteryParams,
+                                    notificationSettings.showNotificationAsIsland,
+                                    lastNotificationRfcommConnected
+                                )
+                            }
+                        }
+                        OppoPodsAction.ACTION_CYCLE_ANC -> {
+                            val profile = runCatching { DeviceProfileStore.resolveProfile(context, prefs) }.getOrNull()
+                            val adaptiveEnabled = profile?.adaptiveVisible == true
+                            localAncMode = when (localAncMode) {
+                                2 -> if (adaptiveEnabled) 4 else 3
+                                4 -> 3
+                                3 -> 1
+                                else -> 2
+                            }
+                            Intent(OppoPodsAction.ACTION_ANC_SELECT).apply {
+                                setPackage("com.android.bluetooth")
+                                putExtra("status", localAncMode)
+                                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                p0?.sendBroadcast(this)
                             }
                         }
                     }
+                }
+            }
 
-                    val intentFilter = IntentFilter("chen.action.oppopods.sendstrongtoast")
-                    intentFilter.addAction("chen.action.oppopods.updatepodsnotification")
-                    intentFilter.addAction("chen.action.oppopods.cancelpodsnotification")
-                    intentFilter.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
-                    // 监听耳机实际 ANC 状态变更广播，保持 localAncMode 与 RfcommController 同步
-                    intentFilter.addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
-                    intentFilter.addAction(OppoPodsAction.ACTION_NOTIFICATION_SETTINGS_CHANGED)
-                    context.registerReceiver(broadcastReceiver, intentFilter,
-                        Context.RECEIVER_EXPORTED)
-                    notificationReceiver = broadcastReceiver
-                    notificationReceiverContext = context.applicationContext ?: context
+            val intentFilter = IntentFilter("chen.action.oppopods.sendstrongtoast").apply {
+                addAction("chen.action.oppopods.updatepodsnotification")
+                addAction("chen.action.oppopods.cancelpodsnotification")
+                addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
+                addAction(OppoPodsAction.ACTION_PODS_DISCONNECTED)
+                addAction(OppoPodsAction.ACTION_CYCLE_ANC)
+                addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
+                addAction(OppoPodsAction.ACTION_NOTIFICATION_SETTINGS_CHANGED)
+            }
+            context.registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED)
+            notificationReceiver = broadcastReceiver
+            notificationReceiverContext = context.applicationContext ?: context
+            Log.d("HyperPods", "MiBluetoothToastHook notification receiver registered successfully")
+        }
+
+        // 1. Hook MiuiBluetoothNotification constructors (all variants across MIUI/HyperOS)
+        findClassOrNull("com.android.bluetooth.ble.app.MiuiBluetoothNotification")?.declaredConstructors?.forEach { ctor ->
+            runCatching {
+                hookConstructorAfter(ctor) {
+                    val context = runCatching {
+                        getObjectField(instance, "mContext") as? Context
+                    }.getOrNull() ?: args.firstOrNull { it is Context } as? Context
+                    if (context != null) setupNotificationReceiver(context)
+                }
+            }
+        }
+
+        // 2. Hook BluetoothHeadsetService.onCreate as reliable fallback for Context acquisition
+        findClassOrNull("com.android.bluetooth.ble.app.headset.BluetoothHeadsetService")?.let { serviceClass ->
+            runCatching {
+                hookAfter(findMethod(serviceClass.name, "onCreate")) {
+                    val ctx = instance as? Context ?: return@hookAfter
+                    setupNotificationReceiver(ctx)
+                }
+            }
+        }
+
+        // 3. HyperOS 4.0 status-bar icon protection:
+        // Hook HeadsetIconShowManager (com.android.bluetooth.ble.app.i) getCachedDeviceId (method s)
+        findClassOrNull("com.android.bluetooth.ble.app.i")?.let { iconManagerClass ->
+            iconManagerClass.declaredMethods.filter {
+                it.name == "s" && it.parameterTypes.size == 1 &&
+                it.parameterTypes[0] == String::class.java &&
+                it.returnType == String::class.java
+            }.forEach { method ->
+                runCatching {
+                    hookBefore(method) {
+                        val address = args[0] as? String
+                        if (address != null && (address.uppercase() in activePodAddresses || activePodAddresses.isNotEmpty())) {
+                            val fakeId = FakeDeviceConfig.deviceId(prefs)
+                            result = fakeId
+                            Log.d("HyperPods", "HeadsetIconShowManager.s(deviceId) forced address=$address fakeId=$fakeId")
+                        }
+                    }
+                    Log.d("HyperPods", "Hooked HeadsetIconShowManager.s in com.xiaomi.bluetooth")
+                }
+            }
+        }
+
+        // 4. Hook StatusBarManager.setIconVisibility in com.xiaomi.bluetooth:
+        // Suppress HeadsetIconShowManager from hiding wireless_headset while pod is connected
+        findClassOrNull("android.app.StatusBarManager")?.let { sbmClass ->
+            sbmClass.declaredMethods.filter {
+                it.name == "setIconVisibility" && it.parameterTypes.size == 2 &&
+                it.parameterTypes[0] == String::class.java &&
+                it.parameterTypes[1] == Boolean::class.javaPrimitiveType
+            }.forEach { method ->
+                runCatching {
+                    hookBefore(method) {
+                        val slot = args[0] as? String
+                        val visible = args[1] as? Boolean ?: true
+                        if (slot == "wireless_headset" && !visible) {
+                            if (activePodAddresses.isNotEmpty()) {
+                                Log.d("HyperPods", "Suppressed wireless_headset hiding in com.xiaomi.bluetooth (active pod connected)")
+                                result = null
+                            }
+                        }
+                    }
+                    Log.d("HyperPods", "Hooked StatusBarManager.setIconVisibility in com.xiaomi.bluetooth")
+                }
+            }
         }
     }
 

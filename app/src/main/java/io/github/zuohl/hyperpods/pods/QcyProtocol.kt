@@ -31,8 +31,18 @@ object QcyEqPreset {
 
 object QcyCmd {
     const val REQUEST_DATA = 0xFE
+    const val KEY_SINGLE = 0x01
+    const val KEY_DOUBLE = 0x02
+    const val KEY_TRIPLE = 0x03
+    const val KEY_LONG = 0x04
+    const val FACTORY_RESET = 0x05
+    const val AUTO_POWER_OFF = 0x06
+    const val FIRMWARE_INFO = 0x07
+    const val FIND_DEVICE = 0x08
     const val LOW_LATENCY = 0x09
+    const val VOICE_LANGUAGE = 0x0A
     const val NOISE_CANCEL_MODE = 0x0C
+    const val TRANSPARENCY_LEVEL = 0x0D
     const val SLEEP_MODE = 0x10
     const val EQ_PARAMS_V1 = 0x20
     const val EQ_PARAMS_V2 = 0x22
@@ -43,6 +53,45 @@ object QcyCmd {
     const val BATTERY = 0x2F
     const val ADAPTIVE_VOLUME = 0x40
 }
+
+object QcyKeyAction {
+    const val SINGLE_CLICK = 0x01
+    const val DOUBLE_CLICK = 0x02
+    const val TRIPLE_CLICK = 0x03
+    const val LONG_PRESS = 0x04
+    val ALL = listOf(SINGLE_CLICK, DOUBLE_CLICK, TRIPLE_CLICK, LONG_PRESS)
+}
+
+object QcyEar {
+    const val NONE = 0x00
+    const val LEFT = 0x01
+    const val RIGHT = 0x02
+    const val BOTH = 0x03
+}
+
+object QcyKeyFunction {
+    const val NONE = 0x00
+    const val PLAY_PAUSE = 0x01
+    const val PREVIOUS_TRACK = 0x02
+    const val NEXT_TRACK = 0x03
+    const val VOLUME_UP = 0x04
+    const val VOLUME_DOWN = 0x05
+    const val VOICE_ASSISTANT = 0x06
+    const val GAME_MODE = 0x07
+    const val ANC_MODE = 0x08
+    val ALL = listOf(NONE, PLAY_PAUSE, PREVIOUS_TRACK, NEXT_TRACK, VOLUME_UP, VOLUME_DOWN, VOICE_ASSISTANT, GAME_MODE, ANC_MODE)
+}
+
+data class QcyKeyMapping(
+    val action: Int,
+    val ear: Int,
+    val function: Int,
+)
+
+data class QcyFirmwareInfo(
+    val version: String,
+    val rawModel: String?,
+)
 
 object QcyNoiseMode {
     const val OFF = 0x00
@@ -90,6 +139,31 @@ object QcyPacketBuilder {
 
     fun parametricEqV2(preset: QcyEqCurve): ByteArray =
         frame(command(QcyCmd.EQ_PARAMS_V2, preset.toV2Payload()))
+
+    fun keyFunction(action: Int, ear: Int, function: Int): ByteArray =
+        frame(command(action, ear, function))
+
+    fun findDevice(ear: Int): ByteArray =
+        frame(command(QcyCmd.FIND_DEVICE, ear))
+
+    fun findDevice(leftRing: Boolean, rightRing: Boolean): ByteArray {
+        val ear = when {
+            leftRing && rightRing -> QcyEar.BOTH
+            leftRing -> QcyEar.LEFT
+            rightRing -> QcyEar.RIGHT
+            else -> QcyEar.NONE
+        }
+        return findDevice(ear)
+    }
+
+    fun voiceLanguage(isEnglish: Boolean): ByteArray =
+        frame(command(QcyCmd.VOICE_LANGUAGE, if (isEnglish) 0x02 else 0x01))
+
+    fun autoPowerOff(minutes: Int): ByteArray =
+        frame(command(QcyCmd.AUTO_POWER_OFF, minutes.coerceIn(0, 255)))
+
+    fun factoryReset(): ByteArray =
+        frame(command(QcyCmd.FACTORY_RESET, 0x01))
 }
 
 data class QcyEqCurve(
@@ -275,6 +349,46 @@ object QcyPacketParser {
             index += 7
         }
         return gains.takeIf { it.size == QcyOfficialEqCurves.customFrequencies.size }
+    }
+
+    fun parseKeyMapping(cmd: Int, params: ByteArray): QcyKeyMapping? {
+        if (cmd !in QcyKeyAction.ALL || params.size < 2) return null
+        val ear = params[0].toInt() and 0xFF
+        val func = params[1].toInt() and 0xFF
+        return QcyKeyMapping(
+            action = cmd,
+            ear = ear,
+            function = func,
+        )
+    }
+
+    fun parseFirmwareInfo(params: ByteArray): QcyFirmwareInfo? {
+        if (params.isEmpty()) return null
+        val text = String(params, Charsets.UTF_8).trim().filter { it.code in 32..126 }
+        if (text.isBlank()) return null
+        return QcyFirmwareInfo(
+            version = text,
+            rawModel = if (params.size > 8) params.joinToString("") { "%02X".format(it.toInt() and 0xFF) } else null,
+        )
+    }
+
+    fun parseVoiceLanguage(params: ByteArray): Boolean? {
+        if (params.isEmpty()) return null
+        return when (params[0].toInt() and 0xFF) {
+            0x02 -> true // 英文
+            0x01 -> false // 中文
+            else -> null
+        }
+    }
+
+    fun parseAutoPowerOff(params: ByteArray): Int? {
+        if (params.isEmpty()) return null
+        return params[0].toInt() and 0xFF
+    }
+
+    fun parseFindDevice(params: ByteArray): Int? {
+        if (params.isEmpty()) return null
+        return params[0].toInt() and 0xFF
     }
 
     private fun signedShort(lo: Byte, hi: Byte): Int =

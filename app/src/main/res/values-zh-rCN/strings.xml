@@ -48,6 +48,13 @@
     <string name="custom_button_function_game_mode">游戏模式</string>
     <string name="custom_button_function_adaptive">打开自适应模式</string>
     <string name="custom_button_function_spatial_sound">空间音效</string>
+    <string name="custom_button_function_find_device">查找耳机</string>
+    <string name="find_earphones">查找耳机</string>
+    <string name="find_earphones_summary">让耳机发出蜂鸣提示音以帮助定位</string>
+    <string name="find_earphones_left">左耳响铃</string>
+    <string name="find_earphones_right">右耳响铃</string>
+    <string name="find_earphones_both">双耳响铃</string>
+    <string name="find_earphones_stop">停止响铃</string>
     <string name="custom_button_position">自定义按钮位置</string>
     <string name="custom_button_position_upper">上方（查找耳机卡）</string>
     <string name="custom_button_position_lower">下方（空间音频卡）</string>

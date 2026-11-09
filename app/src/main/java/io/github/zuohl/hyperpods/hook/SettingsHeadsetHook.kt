@@ -184,6 +184,15 @@ object SettingsHeadsetHook : HookContext() {
         }
         hookProxyStringArgResult(proxyClass, "setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java) { commandArgs ->
             val command = commandArgs[0] as? Int
+            val device = commandArgs.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
+            context?.let { ctx ->
+                when (command) {
+                    102 -> sendFindDeviceBroadcast(ctx, device, left = false, right = false)
+                    103 -> sendFindDeviceBroadcast(ctx, device, left = true, right = false)
+                    104 -> sendFindDeviceBroadcast(ctx, device, left = false, right = true)
+                    105 -> sendFindDeviceBroadcast(ctx, device, left = true, right = true)
+                }
+            }
             if (command == 102) "0" else "1"
         }
         hookProxyVoidDeviceNoop(proxyClass, "connect", BluetoothDevice::class.java)
@@ -191,7 +200,7 @@ object SettingsHeadsetHook : HookContext() {
         hookProxyVoidDeviceStringNoop(proxyClass, "getCommonConfig", BluetoothDevice::class.java, String::class.java)
         hookProxyBooleanStringResult(proxyClass, "isMiTWS") { true }
         hookProxyBooleanStringResult(proxyClass, "checkIsMiTWS") { true }
-        hookProxyBooleanStringResult(proxyClass, "getRingFindState") { false }
+        hookProxyBooleanStringResult(proxyClass, "getRingFindState") { true }
         hookProxyVoidDeviceCommand(proxyClass, "changeAncMode", Int::class.java, BluetoothDevice::class.java) { commandArgs ->
             val miMode = commandArgs[0] as? Int ?: return@hookProxyVoidDeviceCommand null
             oppoAncFromSettings(miMode)
@@ -200,6 +209,17 @@ object SettingsHeadsetHook : HookContext() {
             val level = commandArgs[0] as? String ?: return@hookProxyVoidDeviceCommand null
             oppoAncFromLevel(level)
         }
+    }
+
+    private fun sendFindDeviceBroadcast(context: Context, device: BluetoothDevice?, left: Boolean, right: Boolean) {
+        val intent = Intent(OppoPodsAction.ACTION_QCY_FIND_DEVICE_SET).apply {
+            putExtra("left", left)
+            putExtra("right", right)
+            device?.address?.let { putExtra("address", it) }
+            setPackage("com.android.bluetooth")
+        }
+        context.sendBroadcast(intent)
+        Log.d(TAG, "sendFindDeviceBroadcast device=${device?.address} left=$left right=$right")
     }
 
     private fun hookProxyStringResult(className: String, methodName: String, vararg parameterTypes: Class<*>, result: () -> String) {

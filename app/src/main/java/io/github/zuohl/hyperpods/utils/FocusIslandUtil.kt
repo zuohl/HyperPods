@@ -27,7 +27,9 @@ object FocusIslandUtil {
 
     fun showBatteryIsland(
         context: Context,
-        batteryParams: BatteryParams
+        batteryParams: BatteryParams,
+        deviceName: String? = null,
+        address: String? = null
     ): Boolean {
         try {
             val leftConnected = batteryParams.left?.isConnected == true
@@ -38,6 +40,7 @@ object FocusIslandUtil {
 
             val leftText = if (leftConnected) "${batteryParams.left!!.battery}" else "-"
             val rightText = if (rightConnected) "${batteryParams.right!!.battery}" else "-"
+            val displayTitle = deviceName?.takeIf { it.isNotBlank() } ?: "HyperPods"
 
             // 从模块 APK 加载耳机图片为 Bitmap，避免跨包资源引用问题。
             // 优先用用户自定义的岛图（经 ContentProvider 跨进程读取）；缺省回退模块内置资源。
@@ -76,7 +79,7 @@ object FocusIslandUtil {
                 val picRight = createPicture("key_pic_right", rightIcon)
 
                 enableFloat = true
-                ticker = "OppoPods"
+                ticker = displayTitle
                 tickerPic = picLeft
 
                 isShowNotification = false
@@ -107,7 +110,7 @@ object FocusIslandUtil {
                         }
                     }
                     shareData {
-                        title = "OppoPods"
+                        title = displayTitle
                         content = contentText
                         shareContent = contentText
                     }
@@ -116,9 +119,9 @@ object FocusIslandUtil {
 
             val notification = Notification.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("OppoPods")
+                .setContentTitle(displayTitle)
                 .setContentText(contentText)
-                .setTicker("OppoPods")
+                .setTicker(displayTitle)
                 .addExtras(extras)
                 .build()
 
@@ -128,7 +131,7 @@ object FocusIslandUtil {
                 try { nm.cancel(NOTIFICATION_ID) } catch (_: Exception) {}
             }, DISMISS_DELAY_MS)
 
-            Log.d(TAG, "Focus Island shown: L=$leftText% R=$rightText%")
+            Log.d(TAG, "Focus Island shown for $displayTitle: L=$leftText% R=$rightText%")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show Focus Island", e)

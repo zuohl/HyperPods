@@ -22,6 +22,8 @@ abstract class HookContext {
 
     fun findClass(name: String): Class<*> = Class.forName(name, false, appClassLoader)
 
+    fun findClassOrNull(name: String): Class<*>? = runCatching { Class.forName(name, false, appClassLoader) }.getOrNull()
+
     fun findMethod(className: String, methodName: String, vararg parameterTypes: Class<*>): Method =
         findClass(className).getDeclaredMethod(methodName, *parameterTypes).apply { isAccessible = true }
 

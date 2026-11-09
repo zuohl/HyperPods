@@ -232,9 +232,9 @@ object VivoController {
 
     private fun onBattery(b: VivoProtocol.BatteryState) {
         val battery = BatteryParams(
-            left = b.leftPercent?.let { PodParams(it, b.leftCharging, true) },
-            right = b.rightPercent?.let { PodParams(it, b.rightCharging, true) },
-            case = b.casePercent?.let { PodParams(it, b.caseCharging, true) },
+            left = b.leftPercent?.let { PodParams(it, b.leftCharging, true) } ?: PodParams(0, false, false),
+            right = b.rightPercent?.let { PodParams(it, b.rightCharging, true) } ?: PodParams(0, false, false),
+            case = b.casePercent?.let { PodParams(it, b.caseCharging, true) } ?: PodParams(0, false, false),
         )
         currentBattery = battery
         classicDevice?.let { PodMetadata.applyBattery(it, battery) }
@@ -247,7 +247,7 @@ object VivoController {
             if (ctx != null && device != null) {
                 val settings = prefs?.let { io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings.fromPrefs(it) }
                     ?: io.github.zuohl.hyperpods.utils.miuiStrongToast.data.NotificationSettings()
-                PodBroadcaster.showConnectionSuperIsland(ctx, battery, settings)
+                PodBroadcaster.showConnectionSuperIsland(ctx, battery, settings, device.name, device.address)
             }
         }
         classicDevice?.let { device ->
