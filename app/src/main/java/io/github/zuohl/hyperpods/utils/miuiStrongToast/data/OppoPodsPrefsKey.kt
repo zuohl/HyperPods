@@ -35,5 +35,5 @@ object OppoPodsPrefsKey {
     const val SETTINGS_PAGE_STYLE = "settings_page_style"
     const val SETTINGS_PAGE_STYLE_NATIVE = 0
     const val SETTINGS_PAGE_STYLE_CLASSIC = 1
-    const val DEFAULT_SETTINGS_PAGE_STYLE = SETTINGS_PAGE_STYLE_NATIVE
+    const val DEFAULT_SETTINGS_PAGE_STYLE = SETTINGS_PAGE_STYLE_CLASSIC
 }
