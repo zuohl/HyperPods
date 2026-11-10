@@ -5,7 +5,9 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -510,13 +512,49 @@ object MiBluetoothToastHook : HookContext() {
                 runCatching {
                     hookBefore(method) {
                         val address = args[0] as? String
-                        if (address != null && (address.uppercase() in activePodAddresses || activePodAddresses.isNotEmpty())) {
+                        if (isAudioHeadset(address)) {
                             val fakeId = FakeDeviceConfig.deviceId(prefs)
                             result = fakeId
                             Log.d("HyperPods", "HeadsetIconShowManager.s(deviceId) forced address=$address fakeId=$fakeId")
                         }
                     }
                     Log.d("HyperPods", "Hooked HeadsetIconShowManager.s in com.xiaomi.bluetooth")
+                }
+            }
+        }
+
+        // 3.1 HyperOS 4.0 DeviceClassify & ContentProvider protection:
+        listOf("h1.c", "h1.b", "com.android.bluetooth.ble.app.headset.FragmentHandler").forEach { clsName ->
+            findClassOrNull(clsName)?.let { cls ->
+                cls.declaredMethods.forEach { method ->
+                    if (method.returnType == String::class.java) {
+                        val stringArgIdx = method.parameterTypes.indexOf(String::class.java)
+                        if (stringArgIdx >= 0) {
+                            runCatching {
+                                hookBefore(method) {
+                                    val address = args[stringArgIdx] as? String
+                                    if (isAudioHeadset(address)) {
+                                        val fakeId = FakeDeviceConfig.deviceId(prefs)
+                                        result = fakeId
+                                        Log.d("HyperPods", "$clsName.${method.name} forced address=$address fakeId=$fakeId")
+                                    }
+                                }
+                                Log.d("HyperPods", "Hooked $clsName.${method.name} in com.xiaomi.bluetooth")
+                            }
+                        }
+                    } else if (method.returnType == Integer.TYPE) {
+                        val stringArgIdx = method.parameterTypes.indexOf(String::class.java)
+                        if (stringArgIdx >= 0) {
+                            runCatching {
+                                hookBefore(method) {
+                                    val address = args[stringArgIdx] as? String
+                                    if (isAudioHeadset(address)) {
+                                        result = 1
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -534,7 +572,7 @@ object MiBluetoothToastHook : HookContext() {
                         val slot = args[0] as? String
                         val visible = args[1] as? Boolean ?: true
                         if (slot == "wireless_headset" && !visible) {
-                            if (activePodAddresses.isNotEmpty()) {
+                            if (isAnyPodConnected()) {
                                 Log.d("HyperPods", "Suppressed wireless_headset hiding in com.xiaomi.bluetooth (active pod connected)")
                                 result = null
                             }
@@ -544,6 +582,26 @@ object MiBluetoothToastHook : HookContext() {
                 }
             }
         }
+    }
+
+    private val MAC_PATTERN = Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+    private fun isAudioHeadset(address: String?): Boolean {
+        if (address.isNullOrBlank() || !MAC_PATTERN.matches(address)) return false
+        val upper = address.uppercase()
+        if (upper in activePodAddresses) return true
+        val adapter = runCatching { BluetoothAdapter.getDefaultAdapter() }.getOrNull() ?: return false
+        val dev = runCatching { adapter.getRemoteDevice(upper) }.getOrNull() ?: return false
+        val major = dev.bluetoothClass?.majorDeviceClass
+        return major == 0x0400
+    }
+
+    private fun isAnyPodConnected(): Boolean {
+        if (activePodAddresses.isNotEmpty()) return true
+        val bm = runCatching { BluetoothAdapter.getDefaultAdapter() }.getOrNull() ?: return false
+        val a2dp = runCatching { bm.getProfileConnectionState(BluetoothProfile.A2DP) }.getOrNull()
+        val hfp = runCatching { bm.getProfileConnectionState(BluetoothProfile.HEADSET) }.getOrNull()
+        return a2dp == BluetoothProfile.STATE_CONNECTED || hfp == BluetoothProfile.STATE_CONNECTED
     }
 
     override fun onHotReloading() {

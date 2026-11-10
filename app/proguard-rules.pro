@@ -4,20 +4,12 @@
     public static void throw*(...);
 }
 
--repackageclasses
 -allowaccessmodification
 -overloadaggressively
 -renamesourcefileattribute SourceFile
 -keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations,InnerClasses,EnclosingMethod,Signature
 
-# Keep libxposed entry point. The class name is loaded from META-INF/xposed/java_init.list.
--keep class io.github.zuohl.hyperpods.hook.HookEntry { *; }
-
-# Hook classes run inside host processes and are reached from HookEntry at runtime.
--keep class io.github.zuohl.hyperpods.hook.** { *; }
-
-# Parcelable/data classes are shared through broadcast extras across processes.
--keep class io.github.zuohl.hyperpods.utils.miuiStrongToast.data.** { *; }
-
-# ConnectedDevice is sent via putParcelableArrayListExtra in broadcasts.
--keep class io.github.zuohl.hyperpods.pods.ConnectedDevice { *; }
+# Keep entire HyperPods codebase to avoid R8 stripping or mangling classes loaded via Xposed
+-keep class io.github.zuohl.hyperpods.** { *; }
+-keep interface io.github.zuohl.hyperpods.** { *; }
+-keep enum io.github.zuohl.hyperpods.** { *; }
