@@ -127,6 +127,7 @@ object MiuiStrongToastUtil {
         }
         notificationSettings.putExtras(intent)
         intent.`package` = "com.xiaomi.bluetooth"
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         context.sendBroadcast(intent)
     }
 
@@ -143,6 +144,7 @@ object MiuiStrongToastUtil {
         notificationSettings.putExtras(intent)
         intent.putExtra(OppoPodsAction.EXTRA_RFCOMM_CONNECTED, rfcommConnected)
         intent.`package` = "com.xiaomi.bluetooth"
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         context.sendBroadcast(intent)
     }
 
@@ -153,6 +155,7 @@ object MiuiStrongToastUtil {
         val intent = Intent("chen.action.oppopods.cancelpodsnotification")
         intent.putExtra("device", device)
         intent.`package` = "com.xiaomi.bluetooth"
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         context.sendBroadcast(intent)
     }
 

@@ -223,6 +223,9 @@ object QcyController {
                     gatt.discoverServices()
                     changeUIConnectionState("connecting")
                     startHeartbeat()
+                    classicDevice?.address?.let { classicAddr ->
+                        saveCachedLeAddress(classicAddr, gatt.device.address)
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     connected = false
@@ -321,6 +324,7 @@ object QcyController {
         this.classicDevice = device
         this.currentAddress = device.address
         this.currentDeviceName = device.name
+        this.showedConnectedToast = false
         PodMetadata.markHeadset(device)
         restoreCachedEqState()
         if (appRequested) markAppUiActive()
@@ -553,11 +557,22 @@ object QcyController {
         )
     }
 
+    private fun getCachedLeAddress(classicAddress: String): String? {
+        val prefKey = "qcy_le_addr_${classicAddress.uppercase(Locale.ROOT)}"
+        return prefs?.getString(prefKey, null)
+    }
+
+    private fun saveCachedLeAddress(classicAddress: String, leAddress: String) {
+        val prefKey = "qcy_le_addr_${classicAddress.uppercase(Locale.ROOT)}"
+        prefs?.edit()?.putString(prefKey, leAddress.uppercase(Locale.ROOT))?.apply()
+    }
+
     private fun connectLePeer(context: Context, classicDevice: BluetoothDevice) {
         closeGatt()
         val adapter = context.getSystemService(BluetoothManager::class.java).adapter ?: return
         val candidateName = buildLePeerName(classicDevice)
-        val inferredAddress = inferLeAddress(classicDevice.address)
+        val cachedAddress = getCachedLeAddress(classicDevice.address)
+        val inferredAddress = cachedAddress ?: inferLeAddress(classicDevice.address)
         val classicPrefix = classicDevice.address.uppercase(Locale.ROOT).substringBeforeLast(':') + ':'
         val bonded = adapter.bondedDevices.orEmpty()
         // A dual-mode TWS pair shares one MAC prefix between its classic (A2DP/HFP) and LE
@@ -607,7 +622,11 @@ object QcyController {
      */
     private fun inferLeAddress(classicAddress: String): String? {
         val clean = classicAddress.uppercase(Locale.ROOT)
-        return if (clean.endsWith(":CC")) clean.dropLast(2) + "99" else null
+        return when {
+            clean.endsWith(":CC") -> clean.dropLast(2) + "99"
+            clean.endsWith(":23") -> clean.dropLast(2) + "76"
+            else -> null
+        }
     }
 
     /**
@@ -725,6 +744,7 @@ object QcyController {
         reconnectHandler.removeCallbacksAndMessages(null)
         if (!showedConnectedToast) {
             showedConnectedToast = true
+            Log.d(TAG, "show super island: $currentDeviceName ($currentAddress)")
             changeUIConnectionState("connected")
             sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
                 currentAddress?.let { putExtra("address", it) }
@@ -773,6 +793,9 @@ object QcyController {
         status.controlAddress?.let { lastAdvControlAddress = it }
         status.otherAddress?.let { lastAdvOtherAddress = it }
         lastAdvSourceAddress = sourceDevice.address
+        classicDevice?.address?.let { classicAddr ->
+            saveCachedLeAddress(classicAddr, sourceDevice.address)
+        }
         connected = connected || classicDevice != null
         connecting = false
         handleBatteryChanged(status.battery)

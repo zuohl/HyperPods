@@ -384,8 +384,10 @@ object MiBluetoothToastHook : HookContext() {
                     when (action) {
                         "chen.action.oppopods.sendstrongtoast" -> {
                             val address = p1.getStringExtra("address")
+                            val deviceName = p1.getStringExtra("device_name")
                             if (!address.isNullOrBlank()) activePodAddresses.add(address.uppercase())
                             val settings = effectiveNotificationSettings(p1, context)
+                            Log.d("OppoPods", "Received sendstrongtoast for $deviceName ($address) showIsland=${settings.showConnectionBatteryIsland}")
                             if (!settings.showConnectionBatteryIsland) {
                                 Log.d("OppoPods", "Temporary battery island suppressed by settings")
                                 return
@@ -412,7 +414,6 @@ object MiBluetoothToastHook : HookContext() {
                                     rawStatus = 0
                                 )
                             )
-                            val deviceName = p1.getStringExtra("device_name")
                             FocusIslandUtil.showBatteryIsland(context, batteryParams, deviceName, address)
                         }
                         "chen.action.oppopods.updatepodsnotification" -> {
