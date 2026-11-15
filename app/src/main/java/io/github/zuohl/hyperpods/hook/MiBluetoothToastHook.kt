@@ -416,6 +416,7 @@ object MiBluetoothToastHook : HookContext() {
                             val device = p1.getParcelableExtra("device", BluetoothDevice::class.java) ?: return
                             activePodAddresses.remove(device.address.uppercase())
                             cancelNotification(device, context)
+                            hideHeadsetIconIfDisconnected(context)
                         }
                         OppoPodsAction.ACTION_PODS_CONNECTED -> {
                             val address = p1.getStringExtra("address")
@@ -424,6 +425,7 @@ object MiBluetoothToastHook : HookContext() {
                         OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
                             val address = p1.getStringExtra("address")
                             if (!address.isNullOrBlank()) activePodAddresses.remove(address.uppercase())
+                            hideHeadsetIconIfDisconnected(context)
                         }
                         OppoPodsAction.ACTION_PODS_ANC_CHANGED -> {
                             localAncMode = p1.getIntExtra("status", 1)
@@ -559,27 +561,14 @@ object MiBluetoothToastHook : HookContext() {
             }
         }
 
-        // 4. Hook StatusBarManager.setIconVisibility in com.xiaomi.bluetooth:
-        // Suppress HeadsetIconShowManager from hiding wireless_headset while pod is connected
-        findClassOrNull("android.app.StatusBarManager")?.let { sbmClass ->
-            sbmClass.declaredMethods.filter {
-                it.name == "setIconVisibility" && it.parameterTypes.size == 2 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == Boolean::class.javaPrimitiveType
-            }.forEach { method ->
-                runCatching {
-                    hookBefore(method) {
-                        val slot = args[0] as? String
-                        val visible = args[1] as? Boolean ?: true
-                        if (slot == "wireless_headset" && !visible) {
-                            if (isAnyPodConnected()) {
-                                Log.d("HyperPods", "Suppressed wireless_headset hiding in com.xiaomi.bluetooth (active pod connected)")
-                                result = null
-                            }
-                        }
-                    }
-                    Log.d("HyperPods", "Hooked StatusBarManager.setIconVisibility in com.xiaomi.bluetooth")
-                }
+    }
+
+    private fun hideHeadsetIconIfDisconnected(context: Context) {
+        if (!isAnyPodConnected()) {
+            runCatching {
+                val sbm = context.getSystemService("statusbar") ?: return
+                callMethod(sbm, "setIconVisibility", "wireless_headset", false)
+                Log.d("HyperPods", "Forced hide wireless_headset because no pod is connected")
             }
         }
     }

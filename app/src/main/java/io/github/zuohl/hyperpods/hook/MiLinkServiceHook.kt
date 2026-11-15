@@ -290,6 +290,10 @@ object MiLinkServiceHook : HookContext() {
             hookAfter(findMethod(className, methodName, BluetoothDevice::class.java)) {
                 val device = args[0] as? BluetoothDevice ?: return@hookAfter
                 if (!isSupportedPod(device)) return@hookAfter
+                val isConnected = runCatching { callMethod(device, "isConnected") as? Boolean ?: false }.getOrDefault(false)
+                if (!isConnected) {
+                    return@hookAfter
+                }
                 val old = this.result
                 rememberHeadsetController(className, instance, device)
                 captureRuntimeContext(instance)
@@ -1225,7 +1229,15 @@ object MiLinkServiceHook : HookContext() {
                         currentAddress?.let { knownPodAddresses.add(it.uppercase()) }
                     }
                     OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
-                        currentAddress = intent.getStringExtra("address") ?: currentAddress
+                        val address = intent.getStringExtra("address")
+                        if (address.isNullOrBlank() || address.equals(currentAddress, ignoreCase = true)) {
+                            Log.d(TAG, "Device disconnected: address=$address, clearing MiLink state")
+                            currentAddress = null
+                            currentName = null
+                            currentBattery = BatteryParams()
+                            lastCirculateServiceInfo = null
+                            saveState(context)
+                        }
                     }
                     OppoPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
@@ -1291,13 +1303,19 @@ object MiLinkServiceHook : HookContext() {
 
     private fun isSupportedPod(device: BluetoothDevice): Boolean {
         val address = runCatching { device.address }.getOrNull()
-        if (address != null && isKnownPodAddress(address)) return true
+        val isConnected = runCatching { callMethod(device, "isConnected") as? Boolean ?: false }.getOrDefault(false)
+        if (address != null && isKnownPodAddress(address)) {
+            if (isConnected) currentAddress = address
+            return true
+        }
         val name = runCatching { device.name ?: device.alias }.getOrNull().orEmpty()
         val result = PodDetector.isSupportedPod(device)
         if (result && address != null) {
             knownPodAddresses.add(address.uppercase())
-            currentAddress = address
-            currentName = name
+            if (isConnected) {
+                currentAddress = address
+                currentName = name
+            }
         }
         return result
     }

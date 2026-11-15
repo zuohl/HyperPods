@@ -182,7 +182,14 @@ object HeadsetStateDispatcher : HookContext() {
                     // be real, and even then only when no profile remains connected.
                     if (intent.action == BluetoothDevice.ACTION_ACL_DISCONNECTED ||
                         intent.action == BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED) {
-                        Log.d("HyperPods", "ACL drop ignored (not a real disconnect) ${device.address}")
+                        Log.d("HyperPods", "Scheduling ACL disconnect check for ${device.address}")
+                        syncHandler.postDelayed({
+                            if (!hasAnyConnectedProfile(context, device)) {
+                                Log.d("HyperPods", "ACL disconnect confirmed (no profile connected): ${device.address}")
+                                updateHeadsetIcon(context)
+                                PodController.disconnectedPod(context, device)
+                            }
+                        }, 800L)
                         return@onReceive
                     }
                     if (!hasAnyConnectedProfile(context, device)) {
