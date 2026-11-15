@@ -182,14 +182,7 @@ object HeadsetStateDispatcher : HookContext() {
                     // be real, and even then only when no profile remains connected.
                     if (intent.action == BluetoothDevice.ACTION_ACL_DISCONNECTED ||
                         intent.action == BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED) {
-                        Log.d("HyperPods", "Scheduling ACL disconnect check for ${device.address}")
-                        syncHandler.postDelayed({
-                            if (!hasAnyConnectedProfile(context, device)) {
-                                Log.d("HyperPods", "ACL disconnect confirmed (no profile connected): ${device.address}")
-                                updateHeadsetIcon(context)
-                                PodController.disconnectedPod(context, device)
-                            }
-                        }, 800L)
+                        Log.d("HyperPods", "ACL drop ignored (not a real disconnect) ${device.address}")
                         return@onReceive
                     }
                     if (!hasAnyConnectedProfile(context, device)) {
@@ -237,14 +230,15 @@ object HeadsetStateDispatcher : HookContext() {
 
     @SuppressLint("MissingPermission")
     private fun syncConnectedPods(context: Context) {
-        val bluetoothManager = context.getSystemService(BluetoothManager::class.java) ?: return
-        val connected = buildList {
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.LE_AUDIO) }.getOrDefault(emptyList()))
-        }.distinctBy { it.address }
-        for (device in connected) {
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+        val bonded = runCatching { adapter.bondedDevices }.getOrNull() ?: return
+        for (device in bonded) {
             if (!PodController.supports(device)) continue
+            val isConnected = runCatching {
+                val m = device.javaClass.getMethod("isConnected")
+                m.invoke(device) as? Boolean ?: false
+            }.getOrDefault(false)
+            if (!isConnected) continue
             if (PodController.isActivePod(device)) continue
             Log.d("HyperPods", "syncConnectedPods: adopting ${device.address} ${runCatching { device.name }.getOrNull()}")
             showHeadsetIcon(context)
@@ -258,14 +252,16 @@ object HeadsetStateDispatcher : HookContext() {
      */
     @SuppressLint("MissingPermission")
     private fun hasAnyConnectedProfile(context: Context, device: BluetoothDevice): Boolean {
-        val bluetoothManager = context.getSystemService(BluetoothManager::class.java) ?: return false
-        val address = device.address
-        val connected = buildList {
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.LE_AUDIO) }.getOrDefault(emptyList()))
-        }.any { it.address == address }
-        Log.d("HyperPods", "hasAnyConnectedProfile addr=$address connected=$connected")
+        val isConnected = runCatching {
+            val m = device.javaClass.getMethod("isConnected")
+            m.invoke(device) as? Boolean ?: false
+        }.getOrDefault(false)
+        if (isConnected) return true
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return false
+        val a2dp = runCatching { adapter.getProfileConnectionState(BluetoothProfile.A2DP) }.getOrNull()
+        val hfp = runCatching { adapter.getProfileConnectionState(BluetoothProfile.HEADSET) }.getOrNull()
+        val connected = a2dp == BluetoothProfile.STATE_CONNECTED || hfp == BluetoothProfile.STATE_CONNECTED
+        Log.d("HyperPods", "hasAnyConnectedProfile addr=${device.address} connected=$connected")
         return connected
     }
 
@@ -288,12 +284,15 @@ object HeadsetStateDispatcher : HookContext() {
     @SuppressLint("MissingPermission")
     private fun updateHeadsetIcon(context: Context?) {
         if (context == null) return
-        val bluetoothManager = context.getSystemService(BluetoothManager::class.java) ?: return
-        val connected = buildList {
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET) }.getOrDefault(emptyList()))
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP) }.getOrDefault(emptyList()))
-            addAll(runCatching { bluetoothManager.getConnectedDevices(BluetoothProfile.LE_AUDIO) }.getOrDefault(emptyList()))
-        }.distinctBy { it.address }.any { PodController.supports(it) }
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+        val connected = runCatching {
+            adapter.bondedDevices?.any { dev ->
+                PodController.supports(dev) && (runCatching {
+                    val m = dev.javaClass.getMethod("isConnected")
+                    m.invoke(dev) as? Boolean ?: false
+                }.getOrDefault(false))
+            } ?: false
+        }.getOrDefault(false)
         runCatching {
             val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
             statusBarManager.setIconVisibility("wireless_headset", connected)

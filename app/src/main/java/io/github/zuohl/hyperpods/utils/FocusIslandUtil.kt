@@ -19,7 +19,7 @@ import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 @SuppressLint("WrongConstant", "MissingPermission", "NotificationPermission")
 object FocusIslandUtil {
     private const val TAG = "OppoPods-FocusIsland"
-    private const val CHANNEL_ID = "oppopods_focus_island"
+    private const val CHANNEL_ID = "oppopods_focus_island_v2"
     private const val CHANNEL_NAME = "OppoPods Battery"
     private const val NOTIFICATION_ID = 10086
     private const val ISLAND_TIMEOUT_SECONDS = 3
@@ -67,10 +67,11 @@ object FocusIslandUtil {
 
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
                     setSound(null, null)
                     enableVibration(false)
-                    setAllowBubbles(true)
+                    setBypassDnd(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
             )
 
@@ -88,6 +89,16 @@ object FocusIslandUtil {
                 tickerPic = picLeft
 
                 isShowNotification = false
+
+                iconTextInfo {
+                    animIconInfo {
+                        type = 0
+                        src = picLeft
+                    }
+                    title = displayTitle
+                    content = contentText
+                }
+
                 island {
                     islandProperty = 1
                     bigIslandArea {
@@ -127,6 +138,8 @@ object FocusIslandUtil {
                 .setContentTitle(displayTitle)
                 .setContentText(contentText)
                 .setTicker(displayTitle)
+                .setPriority(Notification.PRIORITY_MAX)
+                .setDefaults(0)
                 .addExtras(extras)
                 .build()
 
