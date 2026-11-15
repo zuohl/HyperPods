@@ -379,6 +379,7 @@ object MiBluetoothToastHook : HookContext() {
 
             val broadcastReceiver = object : BroadcastReceiver() {
                 override fun onReceive(p0: Context?, p1: Intent?) {
+                    p1?.setExtrasClassLoader(BatteryParams::class.java.classLoader)
                     val action = p1?.action ?: return
                     when (action) {
                         "chen.action.oppopods.sendstrongtoast" -> {
@@ -389,7 +390,28 @@ object MiBluetoothToastHook : HookContext() {
                                 Log.d("OppoPods", "Temporary battery island suppressed by settings")
                                 return
                             }
-                            val batteryParams = p1.getParcelableExtra("batteryParams", BatteryParams::class.java) ?: return
+                            val batteryParams = runCatching {
+                                p1.getParcelableExtra("batteryParams", BatteryParams::class.java)
+                            }.getOrNull() ?: BatteryParams(
+                                left = io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams(
+                                    battery = p1.getIntExtra("left_battery", 0),
+                                    isCharging = p1.getBooleanExtra("left_charging", false),
+                                    isConnected = p1.getBooleanExtra("left_connected", false),
+                                    rawStatus = 0
+                                ),
+                                right = io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams(
+                                    battery = p1.getIntExtra("right_battery", 0),
+                                    isCharging = p1.getBooleanExtra("right_charging", false),
+                                    isConnected = p1.getBooleanExtra("right_connected", false),
+                                    rawStatus = 0
+                                ),
+                                case = io.github.zuohl.hyperpods.utils.miuiStrongToast.data.PodParams(
+                                    battery = p1.getIntExtra("case_battery", 0),
+                                    isCharging = p1.getBooleanExtra("case_charging", false),
+                                    isConnected = p1.getBooleanExtra("case_connected", false),
+                                    rawStatus = 0
+                                )
+                            )
                             val deviceName = p1.getStringExtra("device_name")
                             FocusIslandUtil.showBatteryIsland(context, batteryParams, deviceName, address)
                         }
@@ -479,6 +501,16 @@ object MiBluetoothToastHook : HookContext() {
             notificationReceiver = broadcastReceiver
             notificationReceiverContext = context.applicationContext ?: context
             Log.d("HyperPods", "MiBluetoothToastHook notification receiver registered successfully")
+        }
+
+        // 0. Hook Application.onCreate for early, reliable Context acquisition
+        findClassOrNull("android.app.Application")?.let { appCls ->
+            runCatching {
+                hookAfter(findMethod(appCls.name, "onCreate")) {
+                    val ctx = instance as? Context ?: return@hookAfter
+                    setupNotificationReceiver(ctx)
+                }
+            }
         }
 
         // 1. Hook MiuiBluetoothNotification constructors (all variants across MIUI/HyperOS)

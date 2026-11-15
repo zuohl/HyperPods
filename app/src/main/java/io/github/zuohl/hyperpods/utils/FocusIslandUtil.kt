@@ -51,14 +51,19 @@ object FocusIslandUtil {
             val rightBitmap = loadCustomBitmap(context, PodImageSlot.ISLAND_RIGHT)
                 ?: ModuleImageUtil.bitmap(context, "img_right.png")
 
-            if (leftBitmap == null || rightBitmap == null) {
+            val fallbackBitmap by lazy {
+                BitmapFactory.decodeResource(context.resources, android.R.drawable.stat_sys_data_bluetooth)
+            }
+            val safeLeft = leftBitmap ?: fallbackBitmap
+            val safeRight = rightBitmap ?: fallbackBitmap
+            if (safeLeft == null || safeRight == null) {
                 Log.e(TAG, "Failed to decode earphone icon bitmaps")
                 return false
             }
 
             // 使用 createWithBitmap 直接嵌入图片数据，SystemUI 无需再访问模块资源
-            val leftIcon = Icon.createWithBitmap(leftBitmap)
-            val rightIcon = Icon.createWithBitmap(rightBitmap)
+            val leftIcon = Icon.createWithBitmap(safeLeft)
+            val rightIcon = Icon.createWithBitmap(safeRight)
 
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(

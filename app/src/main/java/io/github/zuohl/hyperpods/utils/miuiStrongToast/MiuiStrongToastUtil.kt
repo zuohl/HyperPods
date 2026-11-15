@@ -110,6 +110,15 @@ object MiuiStrongToastUtil {
     ) {
         val intent = Intent("chen.action.oppopods.sendstrongtoast")
         intent.putExtra("batteryParams", batteryParams)
+        intent.putExtra("left_battery", batteryParams.left?.battery ?: 0)
+        intent.putExtra("left_connected", batteryParams.left?.isConnected == true)
+        intent.putExtra("left_charging", batteryParams.left?.isCharging == true)
+        intent.putExtra("right_battery", batteryParams.right?.battery ?: 0)
+        intent.putExtra("right_connected", batteryParams.right?.isConnected == true)
+        intent.putExtra("right_charging", batteryParams.right?.isCharging == true)
+        intent.putExtra("case_battery", batteryParams.case?.battery ?: 0)
+        intent.putExtra("case_connected", batteryParams.case?.isConnected == true)
+        intent.putExtra("case_charging", batteryParams.case?.isCharging == true)
         if (!deviceName.isNullOrBlank()) {
             intent.putExtra("device_name", deviceName)
         }
