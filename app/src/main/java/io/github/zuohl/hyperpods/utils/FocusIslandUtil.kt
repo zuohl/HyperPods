@@ -19,7 +19,7 @@ import io.github.zuohl.hyperpods.utils.miuiStrongToast.data.BatteryParams
 @SuppressLint("WrongConstant", "MissingPermission", "NotificationPermission")
 object FocusIslandUtil {
     private const val TAG = "OppoPods-FocusIsland"
-    private const val CHANNEL_ID = "oppopods_focus_island_v2"
+    private const val CHANNEL_ID = "oppopods_focus_island"
     private const val CHANNEL_NAME = "OppoPods Battery"
     private const val NOTIFICATION_ID = 10086
     private const val ISLAND_TIMEOUT_SECONDS = 3
@@ -66,12 +66,12 @@ object FocusIslandUtil {
             val rightIcon = Icon.createWithBitmap(safeRight)
 
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            runCatching { nm.deleteNotificationChannel("oppopods_focus_island_v2") }
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
+                NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT).apply {
                     setSound(null, null)
                     enableVibration(false)
-                    setBypassDnd(true)
-                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setAllowBubbles(true)
                 }
             )
 
@@ -138,8 +138,6 @@ object FocusIslandUtil {
                 .setContentTitle(displayTitle)
                 .setContentText(contentText)
                 .setTicker(displayTitle)
-                .setPriority(Notification.PRIORITY_MAX)
-                .setDefaults(0)
                 .addExtras(extras)
                 .build()
 
