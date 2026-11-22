@@ -68,6 +68,20 @@ object PodController {
         activePod = null
     }
 
+    fun hasActivePod(): Boolean = activePod != null
+
+    fun disconnectActivePod(context: Context) {
+        val pod = activePod ?: return
+        val currentAddr = pod.currentStatusSnapshot().address
+        val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
+        val device = currentAddr?.let { runCatching { adapter?.getRemoteDevice(it) }.getOrNull() }
+        if (device != null) {
+            disconnectedPod(context, device)
+        } else {
+            activePod = null
+        }
+    }
+
     fun queryStatus() {
         activePod?.queryStatus()
     }
